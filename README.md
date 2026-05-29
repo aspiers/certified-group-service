@@ -14,11 +14,11 @@ CGS acts as an authenticated proxy between clients and a group's PDS:
 
 ### Role hierarchy
 
-| Role | Level | Capabilities |
-|------|-------|-------------|
-| **member** | 0 | Create records, edit/delete own records, upload blobs, list members |
-| **admin** | 1 | All member permissions + edit/delete any member's records, edit group profile, manage members, query audit log |
-| **owner** | 2 | All admin permissions + set roles (promote/demote members) |
+| Role       | Level | Capabilities                                                                                                   |
+| ---------- | ----- | -------------------------------------------------------------------------------------------------------------- |
+| **member** | 0     | Create records, edit/delete own records, upload blobs, list members                                            |
+| **admin**  | 1     | All member permissions + edit/delete any member's records, edit group profile, manage members, query audit log |
+| **owner**  | 2     | All admin permissions + set roles (promote/demote members)                                                     |
 
 ### Storage
 
@@ -63,16 +63,16 @@ pnpm dev
 
 ## Environment variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `PORT` | No | `3000` | HTTP server listen port |
-| `SERVICE_URL` | **Yes** | — | Public URL of this service (e.g. `https://group-service.example.com`). Written into group DID documents for atproto-proxy resolution. |
-| `DATA_DIR` | No | `./data` | Directory for SQLite databases |
-| `ENCRYPTION_KEY` | **Yes** | — | 32-byte hex key for AES-256-GCM encryption of stored PDS credentials. Generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `PLC_URL` | No | `https://plc.directory` | PLC directory URL for DID resolution |
-| `DID_CACHE_TTL_MS` | No | `600000` | DID document cache TTL in milliseconds (10 min) |
-| `MAX_BLOB_SIZE` | No | `5242880` | Maximum blob upload size in bytes (5 MB) |
-| `LOG_LEVEL` | No | `info` | Log level: `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
+| Variable           | Required | Default                 | Description                                                                                                                                                     |
+| ------------------ | -------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`             | No       | `3000`                  | HTTP server listen port                                                                                                                                         |
+| `SERVICE_URL`      | **Yes**  | —                       | Public URL of this service (e.g. `https://group-service.example.com`). Written into group DID documents for atproto-proxy resolution.                           |
+| `DATA_DIR`         | No       | `./data`                | Directory for SQLite databases                                                                                                                                  |
+| `ENCRYPTION_KEY`   | **Yes**  | —                       | 32-byte hex key for AES-256-GCM encryption of stored PDS credentials. Generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `PLC_URL`          | No       | `https://plc.directory` | PLC directory URL for DID resolution                                                                                                                            |
+| `DID_CACHE_TTL_MS` | No       | `600000`                | DID document cache TTL in milliseconds (10 min)                                                                                                                 |
+| `MAX_BLOB_SIZE`    | No       | `5242880`               | Maximum blob upload size in bytes (5 MB)                                                                                                                        |
+| `LOG_LEVEL`        | No       | `info`                  | Log level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`                                                                                                   |
 
 ## Running tests
 

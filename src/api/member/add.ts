@@ -10,12 +10,19 @@ export default function (server: Server, ctx: AppContext) {
   registerAuthedMethod(server, 'app.certified.group.member.add', ctx, {
     handler: async ({ auth, input: xrpcInput }) => {
       const { callerDid, groupDid } = auth.credentials
-      const { memberDid, role } = xrpcInput?.body as { memberDid: string; role: Role }
+      const { memberDid, role } = xrpcInput?.body as {
+        memberDid: string
+        role: Role
+      }
 
       // Validate inputs before any async work
       ensureValidDid(memberDid)
       if (!ASSIGNABLE_ROLES.includes(role)) {
-        throw new XRPCError(400, `Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}`, 'InvalidRole')
+        throw new XRPCError(
+          400,
+          `Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}`,
+          'InvalidRole',
+        )
       }
 
       const groupDb = ctx.groupDbs.get(groupDid)
@@ -24,7 +31,7 @@ export default function (server: Server, ctx: AppContext) {
       const callerRole = await ctx.rbac.assertCan(groupDb, callerDid, 'member.add')
 
       // Cannot assign equal or higher role
-      if (ROLE_HIERARCHY[callerRole] <= ROLE_HIERARCHY[role as Role]) {
+      if (ROLE_HIERARCHY[callerRole] <= ROLE_HIERARCHY[role]) {
         throw new ForbiddenError('Cannot assign a role equal to or higher than your own')
       }
 
@@ -44,7 +51,10 @@ export default function (server: Server, ctx: AppContext) {
         .where('member_did', '=', memberDid)
         .executeTakeFirstOrThrow()
 
-      await ctx.audit.log(groupDb, callerDid, 'member.add', 'permitted', { memberDid, role })
+      await ctx.audit.log(groupDb, callerDid, 'member.add', 'permitted', {
+        memberDid,
+        role,
+      })
 
       return jsonResponse({
         memberDid: member.member_did,

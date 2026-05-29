@@ -68,11 +68,11 @@ Create a new record in the group's repository.
 
 **Errors:**
 
-| Code | Name | Description |
-|------|------|-------------|
-| 400 | InvalidRequest | `repo` does not match the group DID |
-| 401 | AuthenticationRequired | Missing or invalid JWT |
-| 403 | Forbidden | Caller lacks member role |
+| Code | Name                   | Description                         |
+| ---- | ---------------------- | ----------------------------------- |
+| 400  | InvalidRequest         | `repo` does not match the group DID |
+| 401  | AuthenticationRequired | Missing or invalid JWT              |
+| 403  | Forbidden              | Caller lacks member role            |
 
 **Example:**
 
@@ -101,12 +101,12 @@ Update an existing record or create one at a specific key.
 
 **Required role:** Depends on context:
 
-| Scenario | Operation | Required role |
-|----------|-----------|---------------|
-| Updating `app.bsky.actor.profile` with rkey `self` | `putRecord:profile` | admin |
-| Updating a record you authored | `putOwnRecord` | member |
-| Updating another member's record | `putAnyRecord` | admin |
-| Creating a new record (no existing author) | `createRecord` | member |
+| Scenario                                           | Operation           | Required role |
+| -------------------------------------------------- | ------------------- | ------------- |
+| Updating `app.bsky.actor.profile` with rkey `self` | `putRecord:profile` | admin         |
+| Updating a record you authored                     | `putOwnRecord`      | member        |
+| Updating another member's record                   | `putAnyRecord`      | admin         |
+| Creating a new record (no existing author)         | `createRecord`      | member        |
 
 **Request body:**
 
@@ -134,11 +134,11 @@ Update an existing record or create one at a specific key.
 
 **Errors:**
 
-| Code | Name | Description |
-|------|------|-------------|
-| 400 | InvalidRequest | `repo` does not match the group DID |
-| 401 | AuthenticationRequired | Missing or invalid JWT |
-| 403 | Forbidden | Caller lacks required role for this operation |
+| Code | Name                   | Description                                   |
+| ---- | ---------------------- | --------------------------------------------- |
+| 400  | InvalidRequest         | `repo` does not match the group DID           |
+| 401  | AuthenticationRequired | Missing or invalid JWT                        |
+| 403  | Forbidden              | Caller lacks required role for this operation |
 
 **Example:**
 
@@ -168,10 +168,10 @@ Delete a record from the group's repository.
 
 **Required role:**
 
-| Scenario | Operation | Required role |
-|----------|-----------|---------------|
-| Deleting a record you authored | `deleteOwnRecord` | member |
-| Deleting another member's record | `deleteAnyRecord` | admin |
+| Scenario                         | Operation         | Required role |
+| -------------------------------- | ----------------- | ------------- |
+| Deleting a record you authored   | `deleteOwnRecord` | member        |
+| Deleting another member's record | `deleteAnyRecord` | admin         |
 
 **Request body:**
 
@@ -191,11 +191,11 @@ Delete a record from the group's repository.
 
 **Errors:**
 
-| Code | Name | Description |
-|------|------|-------------|
-| 400 | InvalidRequest | `repo` does not match the group DID |
-| 401 | AuthenticationRequired | Missing or invalid JWT |
-| 403 | Forbidden | Caller lacks required role |
+| Code | Name                   | Description                         |
+| ---- | ---------------------- | ----------------------------------- |
+| 400  | InvalidRequest         | `repo` does not match the group DID |
+| 401  | AuthenticationRequired | Missing or invalid JWT              |
+| 403  | Forbidden              | Caller lacks required role          |
 
 **Example:**
 
@@ -241,11 +241,11 @@ Upload a blob (image, file, etc.) to the group's PDS.
 
 **Errors:**
 
-| Code | Name | Description |
-|------|------|-------------|
-| 400 | BlobTooLarge | Blob exceeds `MAX_BLOB_SIZE` (default 5 MB) |
-| 401 | AuthenticationRequired | Missing or invalid JWT |
-| 403 | Forbidden | Caller lacks member role |
+| Code | Name                   | Description                                 |
+| ---- | ---------------------- | ------------------------------------------- |
+| 400  | BlobTooLarge           | Blob exceeds `MAX_BLOB_SIZE` (default 5 MB) |
+| 401  | AuthenticationRequired | Missing or invalid JWT                      |
+| 403  | Forbidden              | Caller lacks member role                    |
 
 **Example:**
 
@@ -289,12 +289,12 @@ The `role` field must be `"member"` or `"admin"`. Owners cannot be added via thi
 
 **Errors:**
 
-| Code | Name | Description |
-|------|------|-------------|
-| 400 | InvalidRole | Role is not `member` or `admin` |
-| 401 | AuthenticationRequired | Missing or invalid JWT |
-| 403 | Forbidden | Caller lacks admin role |
-| 409 | MemberAlreadyExists | The DID is already a member |
+| Code | Name                   | Description                     |
+| ---- | ---------------------- | ------------------------------- |
+| 400  | InvalidRole            | Role is not `member` or `admin` |
+| 401  | AuthenticationRequired | Missing or invalid JWT          |
+| 403  | Forbidden              | Caller lacks admin role         |
+| 409  | MemberAlreadyExists    | The DID is already a member     |
 
 **Example:**
 
@@ -332,13 +332,13 @@ Remove a member from the group.
 
 **Errors:**
 
-| Code | Name | Description |
-|------|------|-------------|
-| 400 | CannotRemoveOwner | Cannot remove a member with the owner role |
-| 400 | CannotRemoveHigherRole | Target has equal or higher role than caller |
-| 401 | AuthenticationRequired | Missing or invalid JWT |
-| 403 | Forbidden | Caller lacks admin role (and is not removing self) |
-| 404 | MemberNotFound | Target is not a group member |
+| Code | Name                   | Description                                        |
+| ---- | ---------------------- | -------------------------------------------------- |
+| 400  | CannotRemoveOwner      | Cannot remove a member with the owner role         |
+| 400  | CannotRemoveHigherRole | Target has equal or higher role than caller        |
+| 401  | AuthenticationRequired | Missing or invalid JWT                             |
+| 403  | Forbidden              | Caller lacks admin role (and is not removing self) |
+| 404  | MemberNotFound         | Target is not a group member                       |
 
 **Example:**
 
@@ -361,10 +361,10 @@ List group members with pagination.
 
 **Query parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `limit` | number | 50 | Results per page (1-100) |
-| `cursor` | string | — | Pagination cursor from a previous response |
+| Parameter | Type   | Default | Description                                |
+| --------- | ------ | ------- | ------------------------------------------ |
+| `limit`   | number | 50      | Results per page (1-100)                   |
+| `cursor`  | string | —       | Pagination cursor from a previous response |
 
 **Response (200):**
 
@@ -427,12 +427,12 @@ The `role` field can be `"member"`, `"admin"`, or `"owner"`.
 
 **Errors:**
 
-| Code | Name | Description |
-|------|------|-------------|
-| 400 | LastOwner | Cannot demote the last owner |
-| 401 | AuthenticationRequired | Missing or invalid JWT |
-| 403 | Forbidden | Caller lacks owner role |
-| 404 | MemberNotFound | Target is not a group member |
+| Code | Name                   | Description                  |
+| ---- | ---------------------- | ---------------------------- |
+| 400  | LastOwner              | Cannot demote the last owner |
+| 401  | AuthenticationRequired | Missing or invalid JWT       |
+| 403  | Forbidden              | Caller lacks owner role      |
+| 404  | MemberNotFound         | Target is not a group member |
 
 **Example:**
 
@@ -466,10 +466,10 @@ List all groups the authenticated user belongs to on this group service.
 
 **Query parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `limit` | number | 50 | Results per page (1-100) |
-| `cursor` | string | — | Pagination cursor from a previous response |
+| Parameter | Type   | Default | Description                                |
+| --------- | ------ | ------- | ------------------------------------------ |
+| `limit`   | number | 50      | Results per page (1-100)                   |
+| `cursor`  | string | —       | Pagination cursor from a previous response |
 
 **Response (200):**
 
@@ -497,10 +497,10 @@ Groups are ordered by `joinedAt ASC, groupDid ASC`. Paginate by passing the retu
 
 **Errors:**
 
-| Code | Name | Description |
-|------|------|-------------|
-| 400 | InvalidCursor | Malformed pagination cursor |
-| 401 | AuthenticationRequired | Missing or invalid JWT |
+| Code | Name                   | Description                 |
+| ---- | ---------------------- | --------------------------- |
+| 400  | InvalidCursor          | Malformed pagination cursor |
+| 401  | AuthenticationRequired | Missing or invalid JWT      |
 
 **Error response format:**
 
@@ -539,13 +539,13 @@ Query the group's audit log.
 
 **Query parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `limit` | number | 50 | Results per page (1-100) |
-| `cursor` | string | — | Pagination cursor from a previous response |
-| `actorDid` | string | — | Filter by actor DID |
-| `action` | string | — | Filter by action (e.g. `createRecord`, `member.add`) |
-| `collection` | string | — | Filter by collection NSID |
+| Parameter    | Type   | Default | Description                                          |
+| ------------ | ------ | ------- | ---------------------------------------------------- |
+| `limit`      | number | 50      | Results per page (1-100)                             |
+| `cursor`     | string | —       | Pagination cursor from a previous response           |
+| `actorDid`   | string | —       | Filter by actor DID                                  |
+| `action`     | string | —       | Filter by action (e.g. `createRecord`, `member.add`) |
+| `collection` | string | —       | Filter by collection NSID                            |
 
 **Response (200):**
 
@@ -576,19 +576,19 @@ Entries are ordered newest first (`id DESC`). The `detail` field is a JSON objec
 
 Every audited operation produces one of the following `action` strings. Denied operations use the same action value with `"result": "denied"` and an additional `reason` field in `detail`.
 
-| Action | Trigger | `detail` fields |
-|--------|---------|------------------|
-| `group.register` | Group created via `app.certified.group.register` | `{ handle }` |
-| `member.add` | Member added via `member.add` | `{ memberDid, role }` |
-| `member.remove` | Member removed via `member.remove` | `{ memberDid }` |
-| `role.set` | Role changed via `role.set` | `{ memberDid, previousRole, newRole }` |
-| `createRecord` | Record created (via `createRecord` or `putRecord` for a new rkey) | `{ collection, rkey }` |
-| `putOwnRecord` | Caller updated a record they authored | `{ collection, rkey }` |
-| `putAnyRecord` | Caller updated another member's record | `{ collection, rkey }` |
-| `putRecord:profile` | Group profile updated (`app.bsky.actor.profile` rkey `self`) | `{ collection, rkey }` |
-| `deleteOwnRecord` | Caller deleted a record they authored | `{ collection, rkey }` |
-| `deleteAnyRecord` | Caller deleted another member's record | `{ collection, rkey }` |
-| `uploadBlob` | Blob uploaded via `uploadBlob` | *(none)* |
+| Action              | Trigger                                                           | `detail` fields                        |
+| ------------------- | ----------------------------------------------------------------- | -------------------------------------- |
+| `group.register`    | Group created via `app.certified.group.register`                  | `{ handle }`                           |
+| `member.add`        | Member added via `member.add`                                     | `{ memberDid, role }`                  |
+| `member.remove`     | Member removed via `member.remove`                                | `{ memberDid }`                        |
+| `role.set`          | Role changed via `role.set`                                       | `{ memberDid, previousRole, newRole }` |
+| `createRecord`      | Record created (via `createRecord` or `putRecord` for a new rkey) | `{ collection, rkey }`                 |
+| `putOwnRecord`      | Caller updated a record they authored                             | `{ collection, rkey }`                 |
+| `putAnyRecord`      | Caller updated another member's record                            | `{ collection, rkey }`                 |
+| `putRecord:profile` | Group profile updated (`app.bsky.actor.profile` rkey `self`)      | `{ collection, rkey }`                 |
+| `deleteOwnRecord`   | Caller deleted a record they authored                             | `{ collection, rkey }`                 |
+| `deleteAnyRecord`   | Caller deleted another member's record                            | `{ collection, rkey }`                 |
+| `uploadBlob`        | Blob uploaded via `uploadBlob`                                    | _(none)_                               |
 
 **Denied entries** include the same `detail` fields as permitted entries, plus a `reason` string explaining why the operation was denied:
 

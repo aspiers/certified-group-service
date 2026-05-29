@@ -26,7 +26,10 @@
           "required": ["memberDid", "role", "updatedAt"],
           "properties": {
             "memberDid": { "type": "string", "format": "did" },
-            "role": { "type": "string", "knownValues": ["member", "admin", "owner"] },
+            "role": {
+              "type": "string",
+              "knownValues": ["member", "admin", "owner"]
+            },
             "updatedAt": { "type": "string", "format": "datetime" }
           }
         }
@@ -35,9 +38,18 @@
         { "name": "Unauthorized" },
         { "name": "Forbidden" },
         { "name": "MemberNotFound" },
-        { "name": "InvalidRole", "description": "Role must be one of: member, admin, owner" },
-        { "name": "CannotModifyOwner", "description": "Cannot change owner role — use ownership transfer instead" },
-        { "name": "CannotPromoteToOwner", "description": "Cannot promote to owner — use ownership transfer instead" }
+        {
+          "name": "InvalidRole",
+          "description": "Role must be one of: member, admin, owner"
+        },
+        {
+          "name": "CannotModifyOwner",
+          "description": "Cannot change owner role — use ownership transfer instead"
+        },
+        {
+          "name": "CannotPromoteToOwner",
+          "description": "Cannot promote to owner — use ownership transfer instead"
+        }
       ]
     }
   }

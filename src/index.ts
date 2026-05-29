@@ -71,7 +71,16 @@ async function main() {
   const audit = new AuditLogger()
   const memberIndex = new MemberIndex(globalDbPath)
   const ctx: AppContext = {
-    config, globalDb, globalDbPath, groupDbs, authVerifier, rbac, pdsAgents, audit, memberIndex, logger,
+    config,
+    globalDb,
+    globalDbPath,
+    groupDbs,
+    authVerifier,
+    rbac,
+    pdsAgents,
+    audit,
+    memberIndex,
+    logger,
   }
 
   // Health check (unchanged)
@@ -114,7 +123,7 @@ async function main() {
     clearInterval(nonceCleanupInterval)
     // Stop accepting new connections and destroy lingering keep-alive sockets concurrently
     const closeServer = new Promise<void>((resolve, reject) =>
-      server.close((err) => (err ? reject(err) : resolve()))
+      server.close((err) => (err ? reject(err) : resolve())),
     )
     logger.info(`Destroying ${openSockets.size} open socket(s) to unblock server close`)
     openSockets.forEach((s) => s.destroy())

@@ -1,11 +1,22 @@
 import type { Server } from '@atproto/xrpc-server'
 import { XRPCError } from '@atproto/xrpc-server'
 import type { AppContext } from '../../context.js'
-import { registerAuthedMethod, jsonResponse, assertCanWithAudit, encodeCursor, decodeCursor, sqliteToIso } from '../util.js'
+import {
+  registerAuthedMethod,
+  jsonResponse,
+  assertCanWithAudit,
+  encodeCursor,
+  decodeCursor,
+  sqliteToIso,
+} from '../util.js'
 
 function parseDetail(s: string | null | undefined): unknown {
   if (!s) return undefined
-  try { return JSON.parse(s) } catch { return undefined }
+  try {
+    return JSON.parse(s)
+  } catch {
+    return undefined
+  }
 }
 
 export default function (server: Server, ctx: AppContext) {
@@ -26,7 +37,16 @@ export default function (server: Server, ctx: AppContext) {
       // Newest-first by id DESC
       let query = groupDb
         .selectFrom('group_audit_log')
-        .select(['id', 'actor_did', 'action', 'collection', 'rkey', 'result', 'detail', 'created_at'])
+        .select([
+          'id',
+          'actor_did',
+          'action',
+          'collection',
+          'rkey',
+          'result',
+          'detail',
+          'created_at',
+        ])
         .orderBy('id', 'desc')
         .limit(limit + 1)
 

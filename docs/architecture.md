@@ -105,20 +105,20 @@ Roles are compared numerically. A higher level grants all permissions of lower l
 
 ### Permission matrix
 
-| Operation | Minimum role | Description |
-|-----------|-------------|-------------|
-| `createRecord` | member | Create new records in the group repo |
-| `uploadBlob` | member | Upload media/blobs |
-| `deleteOwnRecord` | member | Delete records you authored |
-| `putOwnRecord` | member | Edit records you authored |
-| `member.list` | member | List group members |
-| `putAnyRecord` | admin | Edit any member's records |
-| `deleteAnyRecord` | admin | Delete any member's records |
-| `putRecord:profile` | admin | Edit the group's profile (`app.bsky.actor.profile` / `self`) |
-| `member.add` | admin | Add new members |
-| `member.remove` | admin | Remove members (with restrictions) |
-| `audit.query` | admin | Query the audit log |
-| `role.set` | owner | Change member roles |
+| Operation           | Minimum role | Description                                                  |
+| ------------------- | ------------ | ------------------------------------------------------------ |
+| `createRecord`      | member       | Create new records in the group repo                         |
+| `uploadBlob`        | member       | Upload media/blobs                                           |
+| `deleteOwnRecord`   | member       | Delete records you authored                                  |
+| `putOwnRecord`      | member       | Edit records you authored                                    |
+| `member.list`       | member       | List group members                                           |
+| `putAnyRecord`      | admin        | Edit any member's records                                    |
+| `deleteAnyRecord`   | admin        | Delete any member's records                                  |
+| `putRecord:profile` | admin        | Edit the group's profile (`app.bsky.actor.profile` / `self`) |
+| `member.add`        | admin        | Add new members                                              |
+| `member.remove`     | admin        | Remove members (with restrictions)                           |
+| `audit.query`       | admin        | Query the audit log                                          |
+| `role.set`          | owner        | Change member roles                                          |
 
 ### Special rules
 
@@ -141,20 +141,20 @@ The `RbacChecker` class provides two key methods:
 
 #### `groups`
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `did` | TEXT (PK) | The group's DID |
-| `pds_url` | TEXT | URL of the group's backing PDS |
-| `encrypted_app_password` | TEXT | AES-256-GCM encrypted app password for PDS login |
+| Column                   | Type            | Description                                                       |
+| ------------------------ | --------------- | ----------------------------------------------------------------- |
+| `did`                    | TEXT (PK)       | The group's DID                                                   |
+| `pds_url`                | TEXT            | URL of the group's backing PDS                                    |
+| `encrypted_app_password` | TEXT            | AES-256-GCM encrypted app password for PDS login                  |
 | `encrypted_recovery_key` | TEXT (nullable) | AES-256-GCM encrypted recovery keypair for signing PLC operations |
-| `created_at` | TEXT | ISO timestamp, defaults to current time |
+| `created_at`             | TEXT            | ISO timestamp, defaults to current time                           |
 
 #### `nonce_cache`
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `jti` | TEXT (PK) | JWT ID (nonce) |
-| `expires_at` | TEXT | Expiration timestamp |
+| Column       | Type      | Description          |
+| ------------ | --------- | -------------------- |
+| `jti`        | TEXT (PK) | JWT ID (nonce)       |
+| `expires_at` | TEXT      | Expiration timestamp |
 
 Indexed on `expires_at` for efficient cleanup.
 
@@ -164,39 +164,39 @@ Each group gets its own SQLite database, named by the SHA-256 hash of the group 
 
 #### `group_members`
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `member_did` | TEXT (PK) | Member's DID |
-| `role` | TEXT | `member`, `admin`, or `owner` |
-| `added_by` | TEXT | DID of the member who added this person |
-| `added_at` | TEXT | ISO timestamp |
+| Column       | Type      | Description                             |
+| ------------ | --------- | --------------------------------------- |
+| `member_did` | TEXT (PK) | Member's DID                            |
+| `role`       | TEXT      | `member`, `admin`, or `owner`           |
+| `added_by`   | TEXT      | DID of the member who added this person |
+| `added_at`   | TEXT      | ISO timestamp                           |
 
 Composite index on `(added_at, member_did)` for efficient paginated listing.
 
 #### `group_record_authors`
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `record_uri` | TEXT (PK) | AT URI of the record |
-| `author_did` | TEXT | DID of the member who created it |
-| `collection` | TEXT | Collection NSID |
-| `created_at` | TEXT | ISO timestamp |
+| Column       | Type      | Description                      |
+| ------------ | --------- | -------------------------------- |
+| `record_uri` | TEXT (PK) | AT URI of the record             |
+| `author_did` | TEXT      | DID of the member who created it |
+| `collection` | TEXT      | Collection NSID                  |
+| `created_at` | TEXT      | ISO timestamp                    |
 
 Indexed on `author_did` for authorship lookups.
 
 #### `group_audit_log`
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER (PK, auto) | Sequential entry ID |
-| `actor_did` | TEXT | DID of the person who performed the action |
-| `action` | TEXT | Operation name (e.g. `createRecord`, `member.add`) |
-| `collection` | TEXT | Collection NSID (for record operations) |
-| `rkey` | TEXT | Record key (for record operations) |
-| `result` | TEXT | `permitted` or `denied` |
-| `detail` | TEXT | JSON-encoded additional context |
-| `jti` | TEXT | JWT ID for request tracing |
-| `created_at` | TEXT | ISO timestamp |
+| Column       | Type               | Description                                        |
+| ------------ | ------------------ | -------------------------------------------------- |
+| `id`         | INTEGER (PK, auto) | Sequential entry ID                                |
+| `actor_did`  | TEXT               | DID of the person who performed the action         |
+| `action`     | TEXT               | Operation name (e.g. `createRecord`, `member.add`) |
+| `collection` | TEXT               | Collection NSID (for record operations)            |
+| `rkey`       | TEXT               | Record key (for record operations)                 |
+| `result`     | TEXT               | `permitted` or `denied`                            |
+| `detail`     | TEXT               | JSON-encoded additional context                    |
+| `jti`        | TEXT               | JWT ID for request tracing                         |
+| `created_at` | TEXT               | ISO timestamp                                      |
 
 Indexed on `created_at`, `actor_did`, `action`, and `collection` for efficient querying.
 
