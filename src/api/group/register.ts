@@ -31,9 +31,7 @@ export default function (app: Express, ctx: AppContext) {
       // Verify the caller controls the claimed ownerDid
       const { iss } = await ctx.authVerifier.verifyRegistration(req)
       if (iss !== ownerDid) {
-        throw new AuthRequiredError(
-          'Service auth token issuer does not match ownerDid',
-        )
+        throw new AuthRequiredError('Service auth token issuer does not match ownerDid')
       }
       if (!/^[a-zA-Z0-9-]+$/.test(handle)) {
         throw new InvalidRequestError('Invalid handle: must be alphanumeric with hyphens')
@@ -65,18 +63,20 @@ export default function (app: Express, ctx: AppContext) {
           handle: fullHandle,
           password: accountPassword,
           recoveryKey: recoveryDidKey,
-          ...(ctx.config.groupPdsInviteCode && { inviteCode: ctx.config.groupPdsInviteCode }),
+          ...(ctx.config.groupPdsInviteCode && {
+            inviteCode: ctx.config.groupPdsInviteCode,
+          }),
         })
-      } catch (err: any) {
+      } catch (err) {
+        const e = err as { status?: number; error?: string; message?: string }
         if (
-          err?.status === 400 &&
-          (err?.error === 'HandleNotAvailable' ||
-            err?.message?.includes('Handle already taken'))
+          e?.status === 400 &&
+          (e?.error === 'HandleNotAvailable' || e?.message?.includes('Handle already taken'))
         ) {
           throw new ConflictError('Handle already taken on the PDS', 'HandleNotAvailable')
         }
-        if (err?.status === 400) {
-          throw new InvalidRequestError(err?.message ?? 'Invalid request')
+        if (e?.status === 400) {
+          throw new InvalidRequestError(e?.message ?? 'Invalid request')
         }
         throw err
       }
@@ -103,11 +103,11 @@ export default function (app: Express, ctx: AppContext) {
       const operation = await signPlcOperation(
         {
           type: 'plc_operation',
-          rotationKeys: recommended.rotationKeys as string[] ?? [recoveryDidKey],
+          rotationKeys: (recommended.rotationKeys as string[]) ?? [recoveryDidKey],
           verificationMethods: (recommended.verificationMethods as Record<string, string>) ?? {},
           alsoKnownAs: (recommended.alsoKnownAs as string[]) ?? [],
           services: {
-            ...(recommended.services as Record<string, { type: string; endpoint: string }>) ?? {},
+            ...((recommended.services as Record<string, { type: string; endpoint: string }>) ?? {}),
             certified_group: {
               type: 'CertifiedGroupService',
               endpoint: ctx.config.serviceUrl,
@@ -146,7 +146,10 @@ export default function (app: Express, ctx: AppContext) {
           .execute()
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        if (msg.includes('UNIQUE constraint failed') || msg.includes('PRIMARY KEY constraint failed')) {
+        if (
+          msg.includes('UNIQUE constraint failed') ||
+          msg.includes('PRIMARY KEY constraint failed')
+        ) {
           throw new ConflictError('Group already registered', 'GroupAlreadyRegistered')
         }
         throw err

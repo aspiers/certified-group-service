@@ -37,12 +37,12 @@ Your app acts as a **backend-for-frontend (BFF)** that sits between your users a
 
 The group service uses **custom NSIDs** for record operations instead of the standard `com.atproto.repo.*`:
 
-| Operation | NSID to use |
-|---|---|
+| Operation       | NSID to use                             |
+| --------------- | --------------------------------------- |
 | Create a record | `app.certified.group.repo.createRecord` |
-| Update a record | `app.certified.group.repo.putRecord` |
+| Update a record | `app.certified.group.repo.putRecord`    |
 | Delete a record | `app.certified.group.repo.deleteRecord` |
-| Upload a blob | `app.certified.group.repo.uploadBlob` |
+| Upload a blob   | `app.certified.group.repo.uploadBlob`   |
 
 **Why not `com.atproto.repo.*`?** The recommended integration pattern uses service proxying: your app sends requests to the user's PDS with an `atproto-proxy` header, and the PDS forwards them to the group service. When the PDS sees a `com.atproto.repo.createRecord` call, it handles it itself (writing to its own repo) — it has no reason to forward it anywhere. Custom NSIDs like `app.certified.group.repo.createRecord` are unrecognized by the PDS, so it looks up the target service in the group's DID document and proxies the request there. **This is the only way record operations can reach the group service through the proxy pattern.**
 
@@ -55,15 +55,12 @@ The custom lexicons are JSON files shipped with the group service under `lexicon
 Registration requires a **service auth JWT** proving the caller controls the `ownerDid`. Your BFF obtains this from the user's PDS via `com.atproto.server.getServiceAuth`, then forwards it to the group service.
 
 ```typescript
-async function registerGroup(
-  agent: AtpAgent,
-  handle: string,
-  ownerDid: string,
-  email?: string,
-) {
+async function registerGroup(agent: AtpAgent, handle: string, ownerDid: string, email?: string) {
   // Get a service auth JWT from the user's PDS to prove DID control.
   // aud = the group service DID; lxm = the registration endpoint NSID.
-  const { data: { token } } = await agent.com.atproto.server.getServiceAuth({
+  const {
+    data: { token },
+  } = await agent.com.atproto.server.getServiceAuth({
     aud: GROUP_SERVICE_DID,
     lxm: 'app.certified.group.register',
   })
@@ -72,7 +69,7 @@ async function registerGroup(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ handle, ownerDid, email }),
   })
@@ -224,12 +221,11 @@ Use the custom `app.certified.group.repo.uploadBlob` NSID:
 
 ```typescript
 // Upload a blob (max 5 MB)
-const { data: { blob } } = await groupAgent.call(
-  'app.certified.group.repo.uploadBlob',
-  {},
-  imageBuffer,
-  { encoding: 'image/png' },
-)
+const {
+  data: { blob },
+} = await groupAgent.call('app.certified.group.repo.uploadBlob', {}, imageBuffer, {
+  encoding: 'image/png',
+})
 
 // Attach the blob to a post
 await groupAgent.call(
@@ -267,7 +263,9 @@ const { data: record } = await groupAgent.com.atproto.repo.getRecord({
 })
 
 // List records in a collection
-const { data: { records } } = await groupAgent.com.atproto.repo.listRecords({
+const {
+  data: { records },
+} = await groupAgent.com.atproto.repo.listRecords({
   repo: groupDid,
   collection: 'app.bsky.feed.post',
   limit: 50,
@@ -292,12 +290,12 @@ Creates a new record in the group's repository. Tracks the caller as author (use
 **NSID:** `app.certified.group.repo.putRecord`
 **Required role:** depends on context
 
-| Scenario | Required role |
-|----------|---------------|
-| Creating new record (no existing author) | member |
-| Updating a record you authored | member |
-| Updating another member's record | member |
-| Editing the group profile (`app.bsky.actor.profile` rkey `self`) | admin |
+| Scenario                                                         | Required role |
+| ---------------------------------------------------------------- | ------------- |
+| Creating new record (no existing author)                         | member        |
+| Updating a record you authored                                   | member        |
+| Updating another member's record                                 | member        |
+| Editing the group profile (`app.bsky.actor.profile` rkey `self`) | admin         |
 
 ```typescript
 // Edit the group profile (admin only)
@@ -342,10 +340,9 @@ The group DID is **not** passed as a parameter — it's inferred from the JWT's 
 
 ```typescript
 // List members (any member can do this)
-const { data: { members, cursor } } = await groupAgent.call(
-  'app.certified.group.member.list',
-  { limit: 50 },
-)
+const {
+  data: { members, cursor },
+} = await groupAgent.call('app.certified.group.member.list', { limit: 50 })
 // members: [{ did, role, addedBy, addedAt }, ...]
 
 // Add a member (requires admin)
@@ -381,31 +378,34 @@ Every action (permitted or denied) is logged. Admins and owners can query the au
 
 ```typescript
 // All recent entries
-const { data: { entries } } = await groupAgent.call(
-  'app.certified.group.audit.query',
-  {},
-)
+const {
+  data: { entries },
+} = await groupAgent.call('app.certified.group.audit.query', {})
 
 // Filter by actor
-const { data: { entries: userEntries } } = await groupAgent.call(
-  'app.certified.group.audit.query',
-  { actorDid: 'did:plc:specificuser' },
-)
+const {
+  data: { entries: userEntries },
+} = await groupAgent.call('app.certified.group.audit.query', {
+  actorDid: 'did:plc:specificuser',
+})
 
 // Filter by action
-const { data: { entries: deletions } } = await groupAgent.call(
-  'app.certified.group.audit.query',
-  { action: 'deleteOwnRecord' },
-)
+const {
+  data: { entries: deletions },
+} = await groupAgent.call('app.certified.group.audit.query', {
+  action: 'deleteOwnRecord',
+})
 
 // Filter by collection
-const { data: { entries: postEntries } } = await groupAgent.call(
-  'app.certified.group.audit.query',
-  { collection: 'app.bsky.feed.post' },
-)
+const {
+  data: { entries: postEntries },
+} = await groupAgent.call('app.certified.group.audit.query', {
+  collection: 'app.bsky.feed.post',
+})
 ```
 
 Audit entries look like:
+
 ```json
 {
   "id": "42",
@@ -423,13 +423,13 @@ For the full list of `action` values and what each `detail` object contains, see
 
 The group service returns standard XRPC errors:
 
-| Status | Meaning | What to do |
-|--------|---------|------------|
-| 400 | Bad request (validation error) | Check your request body — the `message` field explains what's wrong |
-| 401 | Authentication failed | Session is invalid or expired. Re-authenticate and retry |
-| 403 | Forbidden (insufficient role) | The user doesn't have the required role for this operation |
-| 404 | Not found | Member or record doesn't exist |
-| 409 | Conflict | Member already exists, or handle already taken |
+| Status | Meaning                        | What to do                                                          |
+| ------ | ------------------------------ | ------------------------------------------------------------------- |
+| 400    | Bad request (validation error) | Check your request body — the `message` field explains what's wrong |
+| 401    | Authentication failed          | Session is invalid or expired. Re-authenticate and retry            |
+| 403    | Forbidden (insufficient role)  | The user doesn't have the required role for this operation          |
+| 404    | Not found                      | Member or record doesn't exist                                      |
+| 409    | Conflict                       | Member already exists, or handle already taken                      |
 
 All error responses follow this shape:
 
@@ -442,31 +442,32 @@ All error responses follow this shape:
 
 ## Complete endpoint reference
 
-| NSID | Type | Required role | Description |
-|------|------|---------------|-------------|
-| `app.certified.group.register` | procedure | service auth | Register a new group (direct call, not proxied) |
-| `app.certified.group.repo.createRecord` | procedure | member | Create a record |
-| `app.certified.group.repo.putRecord` | procedure | member/admin | Update or create a record |
-| `app.certified.group.repo.deleteRecord` | procedure | member/admin | Delete a record |
-| `app.certified.group.repo.uploadBlob` | procedure | member | Upload a blob (max 5 MB) |
-| `app.certified.group.member.add` | procedure | admin | Add a member |
-| `app.certified.group.member.remove` | procedure | admin/self | Remove a member |
-| `app.certified.group.member.list` | query | member | List members with pagination |
-| `app.certified.group.role.set` | procedure | owner | Change a member's role |
-| `app.certified.group.audit.query` | query | admin | Query the audit log |
+| NSID                                    | Type      | Required role | Description                                     |
+| --------------------------------------- | --------- | ------------- | ----------------------------------------------- |
+| `app.certified.group.register`          | procedure | service auth  | Register a new group (direct call, not proxied) |
+| `app.certified.group.repo.createRecord` | procedure | member        | Create a record                                 |
+| `app.certified.group.repo.putRecord`    | procedure | member/admin  | Update or create a record                       |
+| `app.certified.group.repo.deleteRecord` | procedure | member/admin  | Delete a record                                 |
+| `app.certified.group.repo.uploadBlob`   | procedure | member        | Upload a blob (max 5 MB)                        |
+| `app.certified.group.member.add`        | procedure | admin         | Add a member                                    |
+| `app.certified.group.member.remove`     | procedure | admin/self    | Remove a member                                 |
+| `app.certified.group.member.list`       | query     | member        | List members with pagination                    |
+| `app.certified.group.role.set`          | procedure | owner         | Change a member's role                          |
+| `app.certified.group.audit.query`       | query     | admin         | Query the audit log                             |
 
 ## Role quick reference
 
 Roles are **per-group**, not global. A user can be an owner of one group, a member of another, and not part of a third. Every permission check is scoped to a single group based on the JWT's `aud` claim.
 
-| Role | Can do (within that group) |
-|------|--------|
-| *(anyone)* | Read records (`getRecord`, `listRecords`) — reads go to the PDS, not the group service |
-| **member** | Create records, edit/delete own records, upload blobs, list members |
-| **admin** | Everything above + edit/delete any member's records, edit group profile, add/remove members, query audit log |
-| **owner** | Everything above + change member roles (promote/demote to any level including owner) |
+| Role       | Can do (within that group)                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| _(anyone)_ | Read records (`getRecord`, `listRecords`) — reads go to the PDS, not the group service                       |
+| **member** | Create records, edit/delete own records, upload blobs, list members                                          |
+| **admin**  | Everything above + edit/delete any member's records, edit group profile, add/remove members, query audit log |
+| **owner**  | Everything above + change member roles (promote/demote to any level including owner)                         |
 
 Key constraints:
+
 - Admins can add members at `member` or `admin` level — but not at or above their own role
 - Admins can remove members below their own role level
 - Any member can remove themselves (self-removal)
@@ -476,6 +477,7 @@ Key constraints:
 ## Reference implementation
 
 The [demo app](../demo/) is a complete working example with:
+
 - OAuth login via `@atproto/oauth-client-node` ([`demo/server/oauth/client.ts`](../demo/server/oauth/client.ts))
 - Proxy agent creation with custom lexicons ([`demo/server/oauth/proxy-agent.ts`](../demo/server/oauth/proxy-agent.ts))
 - BFF proxy via service proxying ([`demo/server/routes/proxy.ts`](../demo/server/routes/proxy.ts))

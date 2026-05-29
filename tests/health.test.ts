@@ -24,7 +24,9 @@ describe('GET /health', () => {
   })
 
   afterEach(async () => {
-    try { await globalDb.destroy() } catch {}
+    try {
+      await globalDb.destroy()
+    } catch {}
   })
 
   it('returns 200 when DB is healthy', async () => {
@@ -37,6 +39,9 @@ describe('GET /health', () => {
     await globalDb.destroy()
     const res = await request(app).get('/health')
     expect(res.status).toBe(503)
-    expect(res.body).toEqual({ status: 'error', message: 'database unreachable' })
+    expect(res.body).toEqual({
+      status: 'error',
+      message: 'database unreachable',
+    })
   })
 })

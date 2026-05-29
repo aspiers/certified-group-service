@@ -67,13 +67,13 @@ export async function proxyToPds<T>(
     return await pdsAgents.withAgent(groupDid, fn)
   } catch (err) {
     if (err instanceof UpstreamFailureError) throw err
-    if (
-      err instanceof ClientXRPCError &&
-      err.status >= 400 &&
-      err.status < 500 &&
-      err.status !== 401
-    ) {
-      throw new XRPCError(err.status as never, err.message, err.error)
+    if (err instanceof ClientXRPCError) {
+      // err.status is the ResponseType enum; coerce to its numeric HTTP
+      // status code so we can range-check it.
+      const status = Number(err.status)
+      if (status >= 400 && status < 500 && status !== 401) {
+        throw new XRPCError(status, err.message, err.error)
+      }
     }
     const msg = err instanceof Error ? err.message : String(err)
     throw new UpstreamFailureError(`Upstream PDS error: ${msg}`)

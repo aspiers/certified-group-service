@@ -30,7 +30,9 @@ describe('openSqliteDb', () => {
 
   it('sets WAL journal mode', async () => {
     const { db } = openSqliteDb(join(tmpDir, 'test.sqlite'))
-    const result = await sql<{ journal_mode: string }>`PRAGMA journal_mode`.execute(db)
+    const result = await sql<{
+      journal_mode: string
+    }>`PRAGMA journal_mode`.execute(db)
     expect(result.rows[0].journal_mode).toBe('wal')
     await db.destroy()
   })

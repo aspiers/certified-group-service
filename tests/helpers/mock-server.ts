@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import type { AppContext } from '../../src/context.js'
 import type { Config } from '../../src/config.js'
 import { RbacChecker } from '../../src/rbac/check.js'
+import type { Role } from '../../src/rbac/permissions.js'
 import { AuditLogger } from '../../src/audit.js'
 import { TestMemberIndex } from '../../src/db/member-index.js'
 import { createTestGlobalDb, createTestGroupDb } from './test-db.js'
@@ -55,14 +56,26 @@ export async function createTestContext(overrides?: Partial<AppContext>): Promis
           atproto: {
             repo: {
               createRecord: async (_input: unknown) => ({
-                data: { uri: 'at://did:plc:testgroup/app.bsky.feed.post/abc123', cid: 'bafytest' },
+                data: {
+                  uri: 'at://did:plc:testgroup/app.bsky.feed.post/abc123',
+                  cid: 'bafytest',
+                },
               }),
               deleteRecord: async () => ({ data: {} }),
               putRecord: async (_input: unknown) => ({
-                data: { uri: 'at://did:plc:testgroup/app.bsky.feed.post/abc123', cid: 'bafytest' },
+                data: {
+                  uri: 'at://did:plc:testgroup/app.bsky.feed.post/abc123',
+                  cid: 'bafytest',
+                },
               }),
               uploadBlob: async () => ({
-                data: { blob: { ref: { $link: 'bafyblob' }, mimeType: 'image/png', size: 1024 } },
+                data: {
+                  blob: {
+                    ref: { $link: 'bafyblob' },
+                    mimeType: 'image/png',
+                    size: 1024,
+                  },
+                },
               }),
             },
           },
@@ -85,19 +98,29 @@ export async function createTestContext(overrides?: Partial<AppContext>): Promis
     pdsAgents: mockPdsAgents as any,
     audit: new AuditLogger(),
     memberIndex,
-    logger: { info: () => {}, error: () => {}, warn: () => {}, debug: () => {} } as any,
+    logger: {
+      info: () => {},
+      error: () => {},
+      warn: () => {},
+      debug: () => {},
+    } as any,
     ...overrides,
   }
 
   return { ctx, globalDb, globalRaw, groupDb, groupRaw }
 }
 
-export const silentLogger = { info: () => {}, error: () => {}, warn: () => {}, debug: () => {} }
+export const silentLogger = {
+  info: () => {},
+  error: () => {},
+  warn: () => {},
+  debug: () => {},
+}
 
 export async function seedMember(
   groupDb: Kysely<GroupDatabase>,
   memberDid: string,
-  role: string,
+  role: Role,
   addedBy = 'did:plc:owner',
 ): Promise<void> {
   await groupDb
@@ -115,7 +138,7 @@ export async function seedMemberWithIndex(
   globalDb: Kysely<GlobalDatabase>,
   memberDid: string,
   groupDid: string,
-  role: string,
+  role: Role,
   addedBy = 'did:plc:owner',
 ): Promise<void> {
   await groupDb

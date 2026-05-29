@@ -37,14 +37,19 @@ export default function (server: Server, ctx: AppContext) {
       }
 
       // Cannot remove a member with equal or higher role (non-self removal only)
-      if (callerDid !== memberDid && ROLE_HIERARCHY[callerRole!] <= ROLE_HIERARCHY[target.role as Role]) {
+      if (
+        callerDid !== memberDid &&
+        ROLE_HIERARCHY[callerRole!] <= ROLE_HIERARCHY[target.role as Role]
+      ) {
         throw new ForbiddenError('Cannot remove a member with equal or higher role')
       }
 
       const groupRaw = ctx.groupDbs.getRaw(groupDid)
       ctx.memberIndex.remove(groupRaw, groupDid, memberDid)
 
-      await ctx.audit.log(groupDb, callerDid, 'member.remove', 'permitted', { memberDid })
+      await ctx.audit.log(groupDb, callerDid, 'member.remove', 'permitted', {
+        memberDid,
+      })
 
       return jsonResponse({})
     },

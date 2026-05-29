@@ -1,5 +1,10 @@
 import { IdResolver } from '@atproto/identity'
-import { AuthRequiredError, verifyJwt as defaultVerifyJwt, parseReqNsid as defaultParseReqNsid, type MethodAuthVerifier } from '@atproto/xrpc-server'
+import {
+  AuthRequiredError,
+  verifyJwt as defaultVerifyJwt,
+  parseReqNsid as defaultParseReqNsid,
+  type MethodAuthVerifier,
+} from '@atproto/xrpc-server'
 import type { Kysely } from 'kysely'
 import type { Request } from 'express'
 import type { GlobalDatabase } from '../db/schema.js'
@@ -58,10 +63,7 @@ export class AuthVerifier {
       null,
       nsid,
       async (did: string, forceRefresh: boolean): Promise<string> => {
-        const atprotoData = await this.idResolver.did.resolveAtprotoData(
-          did,
-          forceRefresh,
-        )
+        const atprotoData = await this.idResolver.did.resolveAtprotoData(did, forceRefresh)
         return atprotoData.signingKey
       },
     )
@@ -107,10 +109,7 @@ export class AuthVerifier {
       this.serviceDid,
       REGISTER_NSID,
       async (did: string, forceRefresh: boolean): Promise<string> => {
-        const atprotoData = await this.idResolver.did.resolveAtprotoData(
-          did,
-          forceRefresh,
-        )
+        const atprotoData = await this.idResolver.did.resolveAtprotoData(did, forceRefresh)
         return atprotoData.signingKey
       },
     )
@@ -154,10 +153,7 @@ export class AuthVerifier {
       this.serviceDid,
       nsid,
       async (did: string, forceRefresh: boolean): Promise<string> => {
-        const atprotoData = await this.idResolver.did.resolveAtprotoData(
-          did,
-          forceRefresh,
-        )
+        const atprotoData = await this.idResolver.did.resolveAtprotoData(did, forceRefresh)
         return atprotoData.signingKey
       },
     )

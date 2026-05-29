@@ -35,11 +35,11 @@ CGS is pre-configured for [Railway](https://railway.app/) via `railway.toml`.
 
 2. **Configure environment variables** in the service settings:
 
-   | Variable | Value |
-   |----------|-------|
-   | `SERVICE_URL` | Full public URL (e.g. `https://your-app.up.railway.app`) |
+   | Variable         | Value                                                                                    |
+   | ---------------- | ---------------------------------------------------------------------------------------- |
+   | `SERVICE_URL`    | Full public URL (e.g. `https://your-app.up.railway.app`)                                 |
    | `ENCRYPTION_KEY` | Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-   | `DATA_DIR` | `/app/data` |
+   | `DATA_DIR`       | `/app/data`                                                                              |
 
    `PORT` is injected automatically by Railway — do not set it manually. All other variables have sensible defaults (see the [environment variables table](../README.md#environment-variables)).
 

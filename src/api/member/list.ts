@@ -1,7 +1,14 @@
 import type { Server } from '@atproto/xrpc-server'
 import { XRPCError } from '@atproto/xrpc-server'
 import type { AppContext } from '../../context.js'
-import { registerAuthedMethod, jsonResponse, assertCanWithAudit, encodeCursor, decodeCursor, sqliteToIso } from '../util.js'
+import {
+  registerAuthedMethod,
+  jsonResponse,
+  assertCanWithAudit,
+  encodeCursor,
+  decodeCursor,
+  sqliteToIso,
+} from '../util.js'
 
 export default function (server: Server, ctx: AppContext) {
   registerAuthedMethod(server, 'app.certified.group.member.list', ctx, {
@@ -30,7 +37,7 @@ export default function (server: Server, ctx: AppContext) {
           eb.or([
             eb('added_at', '>', cursorTs),
             eb.and([eb('added_at', '=', cursorTs), eb('member_did', '>', cursorDid)]),
-          ])
+          ]),
         )
       }
 
