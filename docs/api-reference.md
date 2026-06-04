@@ -578,6 +578,7 @@ Every audited operation produces one of the following `action` strings. Denied o
 | Action              | Trigger                                                           | `detail` fields                        |
 | ------------------- | ----------------------------------------------------------------- | -------------------------------------- |
 | `group.register`    | Group created via `app.certified.group.register`                  | `{ handle }`                           |
+| `group.import`      | Existing account imported via `app.certified.group.import`        | `{ handle }`                           |
 | `member.add`        | Member added via `member.add`                                     | `{ memberDid, role }`                  |
 | `member.remove`     | Member removed via `member.remove`                                | `{ memberDid }`                        |
 | `role.set`          | Role changed via `role.set`                                       | `{ memberDid, previousRole, newRole }` |

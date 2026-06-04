@@ -13,6 +13,7 @@ import roleSet from './role/set.js'
 import auditQuery from './audit/query.js'
 import membershipList from './membership/list.js'
 import groupRegister from './group/register.js'
+import groupImport from './group/import.js'
 
 export function registerXrpcMethods(server: Server, ctx: AppContext): void {
   createRecord(server, ctx)
@@ -30,4 +31,5 @@ export function registerXrpcMethods(server: Server, ctx: AppContext): void {
 /** Routes that live outside the XRPC server (unauthenticated, non-standard). */
 export function registerRawRoutes(app: Express, ctx: AppContext): void {
   groupRegister(app, ctx)
+  groupImport(app, ctx)
 }

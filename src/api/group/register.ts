@@ -5,13 +5,13 @@ import { ensureValidDid } from '@atproto/syntax'
 import { AuthRequiredError, InvalidRequestError } from '@atproto/xrpc-server'
 import type { AppContext } from '../../context.js'
 import { ConflictError } from '../../errors.js'
-import { encrypt } from '../../pds/credentials.js'
 import {
   generateRecoveryKey,
   getLatestPlcCid,
   signPlcOperation,
   submitPlcOperation,
 } from '../../pds/plc.js'
+import { finalizeGroup } from './finalize.js'
 
 export default function (app: Express, ctx: AppContext) {
   app.post('/xrpc/app.certified.group.register', async (req, res, next) => {
@@ -126,45 +126,15 @@ export default function (app: Express, ctx: AppContext) {
       })
       const appPassword = appPasswordRes.data.password
 
-      // Encrypt and store
-      const encryptionKey = Buffer.from(ctx.config.encryptionKey, 'hex')
-      const encrypted = encrypt(appPassword, encryptionKey)
+      // Persist credentials, init per-group DB, seed owner, audit-log
       const recoveryKeyBytes = await recoveryKey.export()
-      const encryptedRecoveryKey = encrypt(
-        Buffer.from(recoveryKeyBytes).toString('base64url'),
-        encryptionKey,
-      )
-      try {
-        await ctx.globalDb
-          .insertInto('groups')
-          .values({
-            did: groupDid,
-            pds_url: pdsUrl,
-            encrypted_app_password: encrypted,
-            encrypted_recovery_key: encryptedRecoveryKey,
-          })
-          .execute()
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
-        if (
-          msg.includes('UNIQUE constraint failed') ||
-          msg.includes('PRIMARY KEY constraint failed')
-        ) {
-          throw new ConflictError('Group already registered', 'GroupAlreadyRegistered')
-        }
-        throw err
-      }
-
-      // Initialize per-group database and run migrations
-      await ctx.groupDbs.migrateGroup(groupDid)
-
-      // Seed owner (atomic write to both group DB and member_index)
-      const groupDb = ctx.groupDbs.get(groupDid)
-      const groupRaw = ctx.groupDbs.getRaw(groupDid)
-      ctx.memberIndex.add(groupRaw, groupDid, ownerDid, 'owner', ownerDid)
-
-      // Audit log the group creation
-      await ctx.audit.log(groupDb, ownerDid, 'group.register', 'permitted', {
+      await finalizeGroup(ctx, {
+        groupDid,
+        pdsUrl,
+        appPassword,
+        ownerDid,
+        recoveryKeyMaterial: Buffer.from(recoveryKeyBytes).toString('base64url'),
+        action: 'group.register',
         handle: fullHandle,
       })
 

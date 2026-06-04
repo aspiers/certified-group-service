@@ -76,6 +76,7 @@ async function main() {
     globalDbPath,
     groupDbs,
     authVerifier,
+    idResolver,
     rbac,
     pdsAgents,
     audit,
@@ -93,8 +94,9 @@ async function main() {
     }
   })
 
-  // group.register needs JSON parsing (outside XRPC server)
+  // group.register and group.import need JSON parsing (outside XRPC server)
   app.use('/xrpc/app.certified.group.register', express.json({ limit: '1mb' }))
+  app.use('/xrpc/app.certified.group.import', express.json({ limit: '1mb' }))
   registerRawRoutes(app, ctx)
 
   // XRPC server — handles all other /xrpc/* routes

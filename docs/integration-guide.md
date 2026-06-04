@@ -86,7 +86,51 @@ async function registerGroup(agent: AtpAgent, handle: string, ownerDid: string, 
 - `ownerDid` — the DID of the user who will own this group. Must match the JWT's `iss` claim. They're immediately seeded as the owner.
 - `email` — optional recovery email for the group account. If omitted, a placeholder is generated. Providing a real email enables the forgot-password flow for credible exit.
 
-Registration is the **only** endpoint called directly (not via proxy). All subsequent calls go through the proxy agent.
+Registration (and import, below) are called **directly**, not via proxy. All subsequent calls go through the proxy agent.
+
+## Step 1b (alternative): Import an existing account
+
+If the account already exists — e.g. a Bluesky/atproto account you want to "promote" to a group rather than creating a fresh one — use `app.certified.group.import` instead of `register`. It reuses the existing DID, handle, and repo.
+
+```typescript
+async function importGroup(
+  agent: AtpAgent,
+  groupDid: string,
+  appPassword: string,
+  ownerDid: string,
+) {
+  const {
+    data: { token },
+  } = await agent.com.atproto.server.getServiceAuth({
+    aud: GROUP_SERVICE_DID,
+    lxm: 'app.certified.group.import',
+  })
+
+  const res = await fetch(`${GROUP_SERVICE}/xrpc/app.certified.group.import`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ groupDid, appPassword, ownerDid }),
+  })
+
+  if (!res.ok) throw new Error(`Import failed: ${res.status}`)
+
+  // Response: { groupDid: "did:plc:abc123", handle: "existing.pds.example.com" }
+  return res.json()
+}
+```
+
+- `groupDid` — the DID of the existing account to import. The group service resolves its PDS and handle from the DID document.
+- `appPassword` — an [app password](https://bsky.app/settings/app-passwords) for that account, so the service can act on its behalf. Stored encrypted; **the owner manages its lifecycle and can revoke it at any time** to sever the service's access.
+- `ownerDid` — as for `register`, must match the JWT's `iss` claim; seeded as owner.
+
+**How import differs from register:**
+
+- The account is **not** created — it already exists, and its DID/handle/repo are reused.
+- The group service holds **no recovery key** for an imported account (unlike registered groups, where it generates one). The owner's own pre-existing account credentials are their credible exit; the service is not a custodian of the account's keys.
+- Import does **not** modify the account's DID document. (Service proxying is not currently relied upon; and an app password cannot perform the PLC operation required to add a service entry. See `docs/design/group-import.md`.)
 
 ## Step 2: Create a proxy agent with custom lexicons
 
@@ -445,6 +489,7 @@ All error responses follow this shape:
 | NSID                                    | Type      | Required role | Description                                     |
 | --------------------------------------- | --------- | ------------- | ----------------------------------------------- |
 | `app.certified.group.register`          | procedure | service auth  | Register a new group (direct call, not proxied) |
+| `app.certified.group.import`            | procedure | service auth  | Import an existing account as a group (direct)  |
 | `app.certified.group.repo.createRecord` | procedure | member        | Create a record                                 |
 | `app.certified.group.repo.putRecord`    | procedure | member/admin  | Update or create a record                       |
 | `app.certified.group.repo.deleteRecord` | procedure | member/admin  | Delete a record                                 |
