@@ -120,6 +120,36 @@ describe('group.import', () => {
     await test.groupDb.destroy()
   })
 
+  it('returns 400 when the groupDid DID document cannot be resolved', async () => {
+    const test = await createTestContext({
+      authVerifier: mockAuth('did:plc:existingaccount'),
+      idResolver: {
+        did: {
+          resolveAtprotoData: async () => {
+            throw new Error('DID not found')
+          },
+        },
+      } as any,
+    })
+    const otherApp = createTestApp(test.ctx, groupImportHandler)
+
+    const res = await request(otherApp).post(ENDPOINT).send(validBody)
+    expect(res.status).toBe(400)
+    expect(res.body.message).toContain('Could not resolve DID document')
+
+    // Failed before any PDS login or persistence
+    expect(AtpAgent).not.toHaveBeenCalled()
+    const group = await test.globalDb
+      .selectFrom('groups')
+      .where('did', '=', 'did:plc:existingaccount')
+      .selectAll()
+      .executeTakeFirst()
+    expect(group).toBeUndefined()
+
+    await test.globalDb.destroy()
+    await test.groupDb.destroy()
+  })
+
   it('returns InvalidAppPassword when login fails (bad/revoked credential)', async () => {
     vi.mocked(AtpAgent).mockImplementationOnce(
       () =>
@@ -138,6 +168,33 @@ describe('group.import', () => {
     expect(res.body.error).toBe('InvalidAppPassword')
 
     // Nothing persisted on failure
+    const group = await globalDb
+      .selectFrom('groups')
+      .where('did', '=', 'did:plc:existingaccount')
+      .selectAll()
+      .executeTakeFirst()
+    expect(group).toBeUndefined()
+  })
+
+  it('does not mask a non-auth PDS error as InvalidAppPassword', async () => {
+    // A 5xx from the account's PDS is an upstream failure, not a bad password;
+    // the handler rethrows it rather than reporting InvalidAppPassword.
+    vi.mocked(AtpAgent).mockImplementationOnce(
+      () =>
+        ({
+          login: vi.fn().mockRejectedValue(
+            Object.assign(new Error('PDS unavailable'), {
+              status: 502,
+              error: 'UpstreamFailure',
+            }),
+          ),
+        }) as any,
+    )
+
+    const res = await request(app).post(ENDPOINT).send(validBody)
+    expect(res.status).not.toBe(200)
+    expect(res.body.error).not.toBe('InvalidAppPassword')
+
     const group = await globalDb
       .selectFrom('groups')
       .where('did', '=', 'did:plc:existingaccount')

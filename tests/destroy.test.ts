@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import express from 'express'
 import request from 'supertest'
+import { AuthRequiredError } from '@atproto/xrpc-server'
 import type { Kysely } from 'kysely'
-import { createTestContext, createTestApp, seedMember } from './helpers/mock-server.js'
+import { createTestContext, createTestApp, mockAuth, seedMember } from './helpers/mock-server.js'
 import groupDestroyHandler from '../src/api/group/destroy.js'
 import type { AppContext } from '../src/context.js'
 import type { GlobalDatabase, GroupDatabase } from '../src/db/schema.js'
@@ -155,5 +156,32 @@ describe('group.destroy', () => {
     const survivors = await globalDb.selectFrom('member_index').selectAll().execute()
     expect(survivors).toHaveLength(1)
     expect(survivors[0].group_did).toBe('did:plc:othergroup')
+  })
+
+  it('rejects unauthenticated requests and tears nothing down', async () => {
+    const test = await createTestContext({
+      authVerifier: {
+        ...mockAuth(OWNER_DID),
+        verify: async () => {
+          throw new AuthRequiredError('Missing auth token')
+        },
+      },
+      groupDbs: {
+        get: () => groupDb,
+        getRaw: () => undefined,
+        migrateGroup: async () => {},
+        destroyGroup,
+        destroyAll: async () => {},
+      } as any,
+    })
+    await seedGroupRow(test.globalDb)
+    const otherApp = createTestApp(test.ctx, groupDestroyHandler)
+
+    const res = await request(otherApp).post(ENDPOINT)
+    expect(res.status).toBe(401)
+    expect(destroyGroup).not.toHaveBeenCalled()
+
+    await test.globalDb.destroy()
+    await test.groupDb.destroy()
   })
 })
