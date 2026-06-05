@@ -92,9 +92,11 @@ Registration (and import, below) are called **directly**, not via proxy. All sub
 
 If the account already exists — e.g. a Bluesky/atproto account you want to "promote" to a group rather than creating a fresh one — use `app.certified.group.import` instead of `register`. It reuses the existing DID, handle, and repo.
 
+The JWT must be signed by **the account being imported** (`groupDid`), not by the prospective owner: the service authenticates the account granting itself to the group (the grantor), and an app password alone cannot produce that signature. So `agent` below is an authenticated session for the `groupDid` account.
+
 ```typescript
 async function importGroup(
-  agent: AtpAgent,
+  agent: AtpAgent, // an authenticated session for the groupDid account
   groupDid: string,
   appPassword: string,
   ownerDid: string,
@@ -124,7 +126,7 @@ async function importGroup(
 
 - `groupDid` — the DID of the existing account to import. The group service resolves its PDS and handle from the DID document.
 - `appPassword` — an [app password](https://bsky.app/settings/app-passwords) for that account, so the service can act on its behalf. Stored encrypted; **the owner manages its lifecycle and can revoke it at any time** to sever the service's access.
-- `ownerDid` — as for `register`, must match the JWT's `iss` claim; seeded as owner.
+- `ownerDid` — the DID seeded as the group's owner. Unlike the JWT issuer (which must be `groupDid`), `ownerDid` is **not** separately authenticated and may differ from `groupDid`: the imported account can hand ownership to a different DID. The recipient is not asked to opt in, so validate it client-side before importing.
 
 **How import differs from register:**
 
@@ -463,6 +465,20 @@ Audit entries look like:
 
 For the full list of `action` values and what each `detail` object contains, see [Action values](./api-reference.md#action-values) in the API reference.
 
+## Removing a group
+
+The owner can remove a group from the service with `app.certified.group.destroy`. Like the other per-group operations it is group-scoped, so the group DID is inferred from the JWT's `aud` claim and there is **no request body**.
+
+```typescript
+// Destroy the group (requires owner)
+// Returns: { groupDid }
+await groupAgent.call('app.certified.group.destroy')
+```
+
+This is the service-level inverse of `register` / `import`: it drops the group's stored credentials, its membership, and its per-group data from the service. It deliberately does **not** touch the underlying PDS account — the DID, handle, and repo continue to exist, so the same account can be re-imported later with `app.certified.group.import`. Destroy is therefore _not_ account deletion; if you also want to tear down the account, do that separately against its PDS.
+
+Because the per-group data (including the audit log) is removed, the destroy is not recorded in the group's audit log — it is recorded only in the service's operational log.
+
 ## Error handling
 
 The group service returns standard XRPC errors:
@@ -498,6 +514,7 @@ All error responses follow this shape:
 | `app.certified.group.member.remove`     | procedure | admin/self    | Remove a member                                 |
 | `app.certified.group.member.list`       | query     | member        | List members with pagination                    |
 | `app.certified.group.role.set`          | procedure | owner         | Change a member's role                          |
+| `app.certified.group.destroy`           | procedure | owner         | Remove the group from the service               |
 | `app.certified.group.audit.query`       | query     | admin         | Query the audit log                             |
 
 ## Role quick reference

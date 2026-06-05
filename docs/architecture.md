@@ -44,6 +44,7 @@ Every request must include an `Authorization: Bearer <JWT>` header. The verifica
    - `app.certified.group.member.remove`
    - `app.certified.group.member.list`
    - `app.certified.group.role.set`
+   - `app.certified.group.destroy`
    - `app.certified.group.audit.query`
 4. **Verify JWT signature** against the issuer's DID document using `@atproto/xrpc-server`'s `verifyJwt()`. This checks:
    - Cryptographic signature validity (resolved via the DID doc's signing key)
@@ -119,6 +120,7 @@ Roles are compared numerically. A higher level grants all permissions of lower l
 | `member.remove`     | admin        | Remove members (with restrictions)                           |
 | `audit.query`       | admin        | Query the audit log                                          |
 | `role.set`          | owner        | Change member roles                                          |
+| `group.destroy`     | owner        | Remove the group from the service (account left intact)      |
 
 ### Special rules
 

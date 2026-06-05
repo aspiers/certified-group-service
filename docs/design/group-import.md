@@ -232,13 +232,13 @@ Flow, with explicit reuse of existing helpers:
 1. **Validate inputs.** `groupDid`, `appPassword`, `ownerDid` all present;
    `ensureValidDid` on `groupDid` and `ownerDid`. (Same validation idiom as
    `register`.)
-2. **Verify the caller controls `ownerDid`.** Use `verifyServiceAuth`, **not**
-   `verifyRegistration`: the latter hardcodes
-   `lxm = 'app.certified.group.register'` (`REGISTER_NSID` in
-   `src/auth/verifier.ts`) and would reject a JWT minted for `import`.
-   `verifyServiceAuth` checks `aud === serviceDid`, derives `lxm` from the
+2. **Verify the caller controls the account being imported.** Use
+   `verifyServiceAuth`: it checks `aud === serviceDid`, derives `lxm` from the
    request's own NSID, and applies the same lifetime + nonce-replay checks.
-   Require `iss === ownerDid` — this is the authority to seed an owner.
+   Require **`iss === groupDid`** — the JWT must be signed by the account being
+   imported (the grantor), which an app password alone cannot do. `ownerDid`
+   (the grantee) is seeded as supplied and is **not** separately authenticated;
+   it may differ from `groupDid`. See the auth-model decision below.
 3. **Resolve the account's PDS and authenticate.** An imported account may live
    on a different PDS than `config.groupPdsUrl`, so resolve its
    `#atproto_pds` service endpoint from the account's DID document, via
@@ -267,9 +267,10 @@ is: factor that tail (encrypt-store-migrate-seed-audit) into a shared helper
 both handlers call, rather than copy-pasting. Step 1 (input validation) is
 shared too. The genuinely new logic is step 3 (resolve the account's PDS + log
 in to an existing account) and the _absence_ of account creation and PLC
-signing. Step 2 differs only in which verifier method is used
-(`verifyServiceAuth` vs `register`'s `verifyRegistration`), for the NSID reason
-noted above.
+signing. Step 2 differs from `register` in **which DID the JWT must prove
+control of**: `register` requires `iss === ownerDid` (the caller seeds
+themselves as owner), whereas `import` requires `iss === groupDid` (the account
+being imported authorises its own promotion). See the auth-model decision below.
 
 **Plumbing prerequisite:** `IdResolver` is constructed in `src/index.ts` but is
 not currently on `AppContext` (only `AuthVerifier` holds a private reference).
@@ -349,11 +350,17 @@ not needed for correctness now, noted as a future option.)
   operations is the same boundary that means importing an account grants CGS no
   identity-level control over it. CGS gets exactly what an app password grants:
   repo read/write and proxied XRPC, nothing more.
-- **Owner verification is unchanged** from `register`: the caller must prove
-  control of `ownerDid` with a service-auth JWT. Supplying someone else's
-  `appPassword` does not let you make yourself owner of _their_ account unless
-  you also control the `ownerDid` you claim — and the seeded owner is whoever
-  the verified JWT issuer is, not an arbitrary input.
+- **Authenticate the grantor, not the grantee.** Unlike `register` (where the
+  caller proves control of `ownerDid` and seeds themselves), `import` requires
+  the JWT issuer to be **`groupDid`** — the account being imported authorises its
+  own promotion. The seeded `ownerDid` is supplied data, not separately proven.
+  This is deliberate: an attacker is the natural beneficiary of any privilege
+  escalation, so proving control of the recipient DID is no evidence of
+  entitlement; the claim worth gating on is the source's consent, which a
+  `groupDid`-signed JWT provides and a leaked app password alone cannot. Handing
+  ownership to a different `ownerDid` requires already controlling `groupDid`
+  (self-harm, not escalation) and should be sanity-checked client-side. See the
+  auth-model decision below.
 - **The app password is a stored secret.** It is encrypted at rest with the same
   AES-256-GCM scheme as registered groups' app passwords
   (`src/pds/credentials.ts`). Its blast radius is bounded by the app-password
@@ -372,6 +379,32 @@ not needed for correctness now, noted as a future option.)
    pre-existing credentials are the exit. See _Credible exit_.
 3. **App-password lifecycle** — _resolved._ Store the supplied app password
    as-is; do not re-mint. Owner-managed, revocable. See _App-password handling_.
+4. **Which JWT issuer to validate** — _resolved (option a)._ Require
+   `iss === groupDid` (the account being imported signs), **not**
+   `iss === ownerDid`. See _Auth model_ below.
+
+### Auth model: validate `iss === groupDid` (the grantor)
+
+The import request names both the account to import (`groupDid`) and the DID to
+seed as owner (`ownerDid`). The JWT can only prove control of one signer, so we
+had to choose which:
+
+- **Option a (chosen): `iss === groupDid`.** The account being imported signs.
+  An app password cannot mint a service-auth JWT, so this proves control of
+  `groupDid` beyond merely holding its app password — a leaked app password
+  alone cannot drive an import. `ownerDid` is seeded as supplied, unauthenticated.
+- **Option b (rejected): `iss === ownerDid`.** The recipient signs; the app
+  password becomes the _only_ proof of `groupDid`, which is strictly weaker.
+
+The deciding principle is **authenticate the grantor, not the grantee**: an
+attacker is the natural beneficiary of any privilege escalation, so proving you
+_want_ ownership is no evidence you are entitled to it. Spend the cryptographic
+proof on the source's consent. The only thing option a gives up is a deferred
+"platform back-end imports on behalf of the account" flow (a back-end holding
+only a stored app password cannot sign as `groupDid`) — but that flow would use
+the API-key mechanism, and its premise already implies a prior interactive
+`groupDid` login to mint the app password in the first place. Full rationale in
+the "CGS account import: UX flows" decision (Notion, Decision log).
 
 Remaining smaller decisions:
 

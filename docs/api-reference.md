@@ -447,6 +447,43 @@ curl -X POST https://group-service.example.com/xrpc/app.certified.group.role.set
 
 ---
 
+### `POST /xrpc/app.certified.group.destroy`
+
+Remove the group from the service.
+
+**Required role:** owner
+
+This is the service-level inverse of `register` / `import`: it removes the group's stored credentials, its membership, and its per-group data from the service. It does **not** delete the underlying PDS account — the DID, handle, and repo continue to exist, so the same account can be re-imported afterwards with `app.certified.group.import`.
+
+**Request body:** none. The target group is taken from the JWT `aud` claim.
+
+**Response (200):**
+
+```json
+{
+  "groupDid": "did:plc:group1"
+}
+```
+
+**Errors:**
+
+| Code | Name                   | Description                                |
+| ---- | ---------------------- | ------------------------------------------ |
+| 401  | AuthenticationRequired | Missing or invalid JWT                     |
+| 403  | Forbidden              | Caller lacks the owner role                |
+| 404  | GroupNotFound          | The group is not registered on the service |
+
+Because the per-group data (including the audit log) is deleted, the destroy is **not** written to the group's audit log — it is recorded only in the service's operational log.
+
+**Example:**
+
+```bash
+curl -X POST https://group-service.example.com/xrpc/app.certified.group.destroy \
+  -H "Authorization: Bearer $JWT"
+```
+
+---
+
 ## Cross-group queries
 
 These endpoints operate at the service level rather than on a single group. The JWT `aud` must be the **service DID** (not a group DID), and `lxm` must match the endpoint's NSID.

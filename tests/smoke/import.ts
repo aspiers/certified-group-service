@@ -74,8 +74,7 @@ async function main() {
   const ownerPassword = reqEnv('OWNER_PASSWORD')
   const importDid = reqEnv('IMPORT_DID')
   const importAppPassword = reqEnv('IMPORT_APP_PASSWORD')
-  const serviceDid =
-    process.env.CGS_SERVICE_DID || `did:web:${new URL(cgsUrl).hostname}`
+  const serviceDid = process.env.CGS_SERVICE_DID || `did:web:${new URL(cgsUrl).hostname}`
 
   console.log('CGS URL:        ', cgsUrl)
   console.log('CGS service DID:', serviceDid)
