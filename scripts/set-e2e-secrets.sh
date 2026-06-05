@@ -109,6 +109,14 @@ while IFS= read -r line || [ -n "$line" ]; do
     skip_count=$((skip_count + 1))
     continue
   fi
+  # Local-only vars the workflow never consumes — intentionally not pushed.
+  case "$key" in
+    IMPORTER_APP_PASSWORD_NAME | REGISTER_HANDLE)
+      echo "skip      $key (local-only; not used by the workflow)"
+      skip_count=$((skip_count + 1))
+      continue
+      ;;
+  esac
 
   kind="$(classify "$key")"
   if [ -z "$kind" ]; then
