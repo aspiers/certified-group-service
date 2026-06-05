@@ -11,6 +11,7 @@ A group's owner can now remove the group from the service.
 **Client app developers:** a new procedure `app.certified.group.destroy` removes a group from the service.
 
 - Call it directly with a group-scoped service-auth JWT (`aud` = the group's DID, `lxm` = `app.certified.group.destroy`), the same auth style as the other per-group methods.
+- Heads-up: using `aud` to name the target group is being deprecated (see issue #27). A future release will read the group from an explicit request field instead and expect `aud` to be the group service's own DID. `destroy` will gain a request-level group field at that point; the `aud` = group DID form will be supported during a transition window and then removed. Build against the explicit-group form once it ships.
 - The caller must hold the `owner` role (new RBAC operation `group.destroy`, owner-only). Admins and members get `403`.
 - No request body — the target group is taken from the JWT audience.
 - Response: `{ groupDid }`.
