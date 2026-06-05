@@ -53,3 +53,9 @@ Feature: RBAC across roles
     When the admin adds a member with the admin role
     Then the response status is 403
     And the response error is "ForbiddenError"
+
+  # --- Cleanup: return the group to owner-only ---
+
+  Scenario: Owner removes the seeded admin and member
+    When the owner removes the admin and member accounts
+    Then the response status is 200

@@ -1,0 +1,74 @@
+name: E2E
+
+# End-to-end cucumber suite against a RUNNING CGS deployment. Unlike the unit
+# suite (ci.yml), this needs a live service URL and real pre-provisioned test
+# accounts, so it is manually dispatched and reads credentials from secrets —
+# it never runs automatically on untrusted PRs (which would expose secrets).
+#
+# Provide the target URL via the `cgs_url` input (falls back to the
+# CGS_URL secret). The accounts are supplied entirely via repository secrets;
+# see e2e/.env.example for what each value is.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cgs_url:
+        description: 'CGS base URL to test against (overrides the CGS_URL secret)'
+        required: false
+        type: string
+      tags:
+        description: "Cucumber tag expression (e.g. '@health' for a liveness-only run)"
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run e2e suite
+        env:
+          # URL: dispatch input wins, else the CGS_URL secret.
+          CGS_URL: ${{ inputs.cgs_url || secrets.CGS_URL }}
+          CGS_SERVICE_DID: ${{ secrets.CGS_SERVICE_DID }}
+          # Importer + owner (commonly the same account).
+          IMPORTER_IDENTIFIER: ${{ secrets.IMPORTER_IDENTIFIER }}
+          IMPORTER_PASSWORD: ${{ secrets.IMPORTER_PASSWORD }}
+          IMPORTER_APP_PASSWORD: ${{ secrets.IMPORTER_APP_PASSWORD }}
+          GROUP_OWNER_IDENTIFIER: ${{ secrets.GROUP_OWNER_IDENTIFIER }}
+          GROUP_OWNER_PASSWORD: ${{ secrets.GROUP_OWNER_PASSWORD }}
+          # RBAC accounts (the @needs-rbac-accounts feature runs only when all set).
+          ADMIN_IDENTIFIER: ${{ secrets.ADMIN_IDENTIFIER }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          MEMBER_IDENTIFIER: ${{ secrets.MEMBER_IDENTIFIER }}
+          MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
+          OUTSIDER_IDENTIFIER: ${{ secrets.OUTSIDER_IDENTIFIER }}
+          OUTSIDER_PASSWORD: ${{ secrets.OUTSIDER_PASSWORD }}
+        run: |
+          if [ -n "${{ inputs.tags }}" ]; then
+            pnpm test:e2e --tags "${{ inputs.tags }}"
+          else
+            pnpm test:e2e
+          fi
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-reports
+          path: reports/
+          if-no-files-found: ignore
