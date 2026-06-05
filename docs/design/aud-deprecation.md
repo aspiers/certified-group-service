@@ -35,10 +35,25 @@ the resource selector are entangled, and differently per method:
 - **`repo.*` procedures** (`createRecord`, `putRecord`, …) already carry the
   group in the request body as the standard `repo` field — _and_ redundantly in
   `aud`.
-- **Query methods** (`member.list`, `audit.query`, …) carry the group **only**
-  in `aud`. `member/list.ts:16` reads `groupDid` straight from
+- **Group-scoped query methods** (`member.list`, `audit.query`, …) carry the
+  group **only** in `aud`. `member/list.ts:16` reads `groupDid` straight from
   `auth.credentials`; there is no request field, and clients that send one are
   rejected.
+
+Two existing exceptions matter for framing:
+
+- **`groups.membership.list` is not group-scoped.** It is already
+  **service-level** — registered with `xrpcServiceAuth()`
+  (`membership/list.ts:9`), so its `aud` is the **service DID** (verified
+  correctly), it takes **no** group, and it returns the caller's memberships
+  **across all groups**. It does not "carry the group only in `aud`"; it carries
+  no group at all. It is the exception to the "query methods" framing above.
+- **`group.register` / `group.import` already verify `aud === serviceDid`** via
+  `registerServiceAuthMethod` → `xrpcServiceAuth()` (`register.ts:26`,
+  `import.ts:59`). So the corrected-`aud` behaviour this doc specifies is **not
+  net-new**: there is an existing, correct service-auth path. The implementation
+  is best framed as **extending the existing service-auth check** to the
+  group-scoped methods, not building a new one.
 
 This blocks API keys (a key has no `aud`, so a query authenticated by a key has
 nowhere to name its group) and is simply incorrect besides.
@@ -197,12 +212,22 @@ sets `repo` and a _correct_ `aud=serviceDid` is fully migrated.
 
 ### Lexicons — add `repo` to query methods
 
-Add the `repo` (`at-identifier`) parameter to the lexicons for the query/custom
-methods that lack it: `member.list`, `audit.query`, and any other authed method
-whose group currently comes only from `aud`. The `repo.*` procedures already
-declare `repo`, so no change there. The field is **optional in the lexicon
-during the deprecation window** (legacy callers omit it); it becomes required
-only at the eventual hard cutover.
+Add the `repo` (`at-identifier`) parameter to the lexicons for the
+**group-scoped** query methods that lack it: `member.list`, `audit.query`, and
+any other authed method whose group currently comes only from `aud`. The
+`repo.*` procedures already declare `repo`, so no change there. The field is
+**optional in the lexicon during the deprecation window** (legacy callers omit
+it); it becomes required only at the eventual hard cutover.
+
+**Explicitly out of scope — these get _no_ `repo` field:**
+
+- **`groups.membership.list`** stays service-level. Its result is inherently
+  **cross-group**, keyed on the caller, not on any one group — adding `repo`
+  would break that semantics. Do **not** sweep it into "add `repo` to the query
+  methods."
+- **`group.register` / `group.import`** are already service-level
+  (`registerServiceAuthMethod`) and target no existing group, so they keep
+  `aud === serviceDid` and gain no `repo`.
 
 ### Deprecation headers
 
