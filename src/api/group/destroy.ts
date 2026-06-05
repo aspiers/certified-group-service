@@ -19,10 +19,12 @@ import { registerAuthedMethod, jsonResponse, assertCanWithAudit } from '../util.
  * must add one (e.g. a `groupDid` input) and switch `aud` back to the service
  * DID. See docs/design/api-keys.md (the `aud` overload section).
  *
- * Operation ordering is safety-driven. Everything in the global DB (member
- * index, groups row) is removed before the irreversible filesystem unlink, so a
- * mid-operation crash leaves at worst an orphaned per-group file (harmless,
- * overwritten on re-import) rather than a groups row pointing at a deleted file.
+ * Operation ordering is safety-driven. The global-DB deletes (member index,
+ * groups row) run in a single transaction so they can't half-apply, and the
+ * irreversible per-group file unlink happens only after that transaction
+ * commits. A mid-operation crash therefore leaves at worst an orphaned
+ * per-group file (harmless, overwritten on re-import) — never a groups row
+ * pointing at a deleted file, nor a cleared index beside a surviving row.
  */
 export default function (server: Server, ctx: AppContext) {
   registerAuthedMethod(server, 'app.certified.group.destroy', ctx, {
@@ -50,10 +52,16 @@ export default function (server: Server, ctx: AppContext) {
       // of the destroy is the service log, not an audit row.
       ctx.logger.info({ groupDid, callerDid }, 'Destroying group')
 
-      // Remove global-DB state first (recoverable if interrupted), then the
-      // irreversible per-group file last.
-      await ctx.globalDb.deleteFrom('member_index').where('group_did', '=', groupDid).execute()
-      await ctx.globalDb.deleteFrom('groups').where('did', '=', groupDid).execute()
+      // Remove global-DB state first, then the irreversible per-group file last.
+      // The two global deletes run in one transaction so they can't half-apply
+      // (e.g. member_index cleared but the groups row left behind, which would
+      // leave a registered group with no membership index). Only after the
+      // transaction commits do we unlink the per-group file, so an interruption
+      // leaves at worst an orphaned file (harmless, overwritten on re-import).
+      await ctx.globalDb.transaction().execute(async (trx) => {
+        await trx.deleteFrom('member_index').where('group_did', '=', groupDid).execute()
+        await trx.deleteFrom('groups').where('did', '=', groupDid).execute()
+      })
       await ctx.groupDbs.destroyGroup(groupDid)
 
       return jsonResponse({ groupDid })
