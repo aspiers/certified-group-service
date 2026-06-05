@@ -9,17 +9,20 @@
  *
  * Config comes from the same DEDICATED env file as the import smoke test
  * (tests/smoke/.env — separate from the repo-root .env, gitignored). The group
- * being destroyed is IMPORT_DID (the account imported earlier); OWNER_* is the
- * owner that mints the JWT. Copy tests/smoke/.env.example to tests/smoke/.env.
+ * being destroyed is IMPORTER_IDENTIFIER (the account imported earlier);
+ * GROUP_OWNER_* is the owner that mints the JWT. Copy tests/smoke/.env.example
+ * to tests/smoke/.env.
  *
  * AUTH MODEL — destroy is group-scoped: the JWT's `aud` must be the GROUP DID
  * (not the service DID, unlike import), and the issuer must be the group's owner
- * (RBAC owner role). This script mints that JWT via the owner's password login
- * (a smoke-test convenience — real callers use OAuth/getServiceAuth).
+ * (RBAC owner role) — i.e. GROUP_OWNER_*. This script mints that JWT via the
+ * owner's password login (a smoke-test convenience — real callers use
+ * OAuth/getServiceAuth).
  *
  * SAFETY — because destroy is irreversible at the service level, this script
  * requires you to interactively type the group's handle to confirm. It resolves
- * the handle from IMPORT_DID's DID document and aborts unless your input matches.
+ * the handle from the group DID's DID document and aborts unless your input
+ * matches.
  *
  * Run from the worktree (has node_modules):
  *   cd .../.claude/worktrees/adam+hyper-469-group-import
@@ -27,35 +30,17 @@
  *
  * Override the env file path with SMOKE_ENV_FILE=/path/to/file if needed.
  */
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
-import dotenv from 'dotenv'
+import { loadSmokeEnv, reqEnv, resolveToDid } from './lib.js'
 
-const here = dirname(fileURLToPath(import.meta.url))
-const envFile = process.env.SMOKE_ENV_FILE || join(here, '.env')
-const loaded = dotenv.config({ path: envFile })
-if (loaded.error) {
-  console.error(`Could not read smoke-test env file: ${envFile}`)
-  console.error(`Copy ${join(here, '.env.example')} to ${envFile} and fill it in.`)
-  process.exit(2)
-}
-console.log(`Loaded smoke-test config from ${envFile}`)
+// Load ONLY the dedicated smoke-test env file (never the repo-root .env).
+loadSmokeEnv(import.meta.url)
 
 import { AtpAgent } from '@atproto/api'
 import { IdResolver } from '@atproto/identity'
 
 const DESTROY_NSID = 'app.certified.group.destroy'
-
-function reqEnv(name: string): string {
-  const v = process.env[name]
-  if (!v) {
-    console.error(`Missing required env var: ${name}`)
-    process.exit(2)
-  }
-  return v
-}
 
 async function confirmByHandle(handle: string): Promise<void> {
   const rl = createInterface({ input: stdin, output: stdout })
@@ -75,34 +60,38 @@ async function confirmByHandle(handle: string): Promise<void> {
 
 async function main() {
   const cgsUrl = reqEnv('CGS_URL').replace(/\/$/, '')
-  const ownerPds = reqEnv('OWNER_PDS')
-  const ownerIdentifier = reqEnv('OWNER_IDENTIFIER')
-  const ownerPassword = reqEnv('OWNER_PASSWORD')
-  const groupDid = reqEnv('IMPORT_DID')
+  const groupOwnerPds = reqEnv('GROUP_OWNER_PDS')
+  const groupOwnerIdentifier = reqEnv('GROUP_OWNER_IDENTIFIER')
+  const groupOwnerPassword = reqEnv('GROUP_OWNER_PASSWORD')
+  const groupIdentifier = reqEnv('IMPORTER_IDENTIFIER')
 
-  console.log('CGS URL:   ', cgsUrl)
-  console.log('Owner PDS: ', ownerPds)
-  console.log('Owner:     ', ownerIdentifier)
-  console.log('Group DID: ', groupDid)
+  console.log('CGS URL:     ', cgsUrl)
+  console.log('Group owner: ', groupOwnerIdentifier)
+  console.log('Group:       ', groupIdentifier)
   console.log('---')
+
+  // The group is identified by the imported account. IMPORTER_IDENTIFIER may be
+  // a handle, but DID-document resolution and the JWT aud below both need a DID.
+  const idResolver = new IdResolver()
+  const groupDid = await resolveToDid(idResolver, groupIdentifier)
 
   // Resolve the group's handle from its DID document for the confirmation
   // prompt. We use the real identity resolver so the handle shown is the one
   // actually published, not something the operator typed.
   console.log('Resolving group handle from DID document...')
-  const idResolver = new IdResolver()
   const atprotoData = await idResolver.did.resolveAtprotoData(groupDid)
   const handle = atprotoData.handle
   console.log('Group handle:', handle)
 
   await confirmByHandle(handle)
 
-  // Log into the owner's PDS and mint a service-auth JWT for destroy. NOTE the
-  // audience is the GROUP DID (group-scoped method), not the service DID.
-  console.log('\nLogging into owner PDS to mint service-auth JWT...')
-  const ownerAgent = new AtpAgent({ service: ownerPds })
-  await ownerAgent.login({ identifier: ownerIdentifier, password: ownerPassword })
-  console.log('Owner DID resolved:', ownerAgent.session?.did)
+  // Log into the GROUP OWNER's PDS and mint a service-auth JWT for destroy.
+  // destroy is owner-gated, so the JWT issuer must be the group's RBAC owner.
+  // NOTE the audience is the GROUP DID (group-scoped method), not the service DID.
+  console.log('\nLogging into group owner PDS to mint service-auth JWT...')
+  const ownerAgent = new AtpAgent({ service: groupOwnerPds })
+  await ownerAgent.login({ identifier: groupOwnerIdentifier, password: groupOwnerPassword })
+  console.log('Group owner DID resolved:', ownerAgent.session?.did)
 
   const {
     data: { token },

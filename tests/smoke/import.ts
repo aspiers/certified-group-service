@@ -19,88 +19,82 @@
  *
  * Override the env file path with SMOKE_ENV_FILE=/path/to/file if needed.
  *
- * AUTH CAVEAT — this script mints the service-auth JWT via a password login
- * (com.atproto.server.createSession). That is a SMOKE-TEST CONVENIENCE, not the
- * production pattern. Real callers (see demo/server, docs/integration-guide.md)
- * authenticate via OAuth and call getServiceAuth over an OAuth session — no
- * account password involved. ePDS accounts are OTP/OAuth-first and may have no
- * password by default; set one on the throwaway test owner account to use this
- * script, or rework it to use @atproto/oauth-client-node to mirror production.
+ * AUTH MODEL — import is option a: the JWT must be signed by the account being
+ * imported (iss === groupDid), NOT by the prospective owner. So this script logs
+ * in as the IMPORTER account and mints the JWT from that session. The ownerDid in
+ * the request body is GROUP_OWNER_IDENTIFIER (the grantee); it is named but not
+ * separately authenticated, so the script does not log in as the owner.
+ *
+ * AUTH CAVEAT — minting the JWT via a password login
+ * (com.atproto.server.createSession) is a SMOKE-TEST CONVENIENCE, not the
+ * production pattern. Real callers (see docs/integration-guide.md) authenticate
+ * via OAuth and call getServiceAuth over an OAuth session — no account password
+ * involved. ePDS accounts are OTP/OAuth-first and may have no password by default;
+ * set one on the throwaway test importer account to use this script, or rework it
+ * to use @atproto/oauth-client-node to mirror production.
  *
  * Notes:
- * - OWNER_* is the account that will become the group owner. It must be able to
- *   mint a service-auth JWT (getServiceAuth) proving control of its DID. Here we
- *   obtain that via password login, so OWNER_PASSWORD must be a real account
- *   password (set one if the account is OTP-only).
- * - IMPORT_DID / IMPORT_APP_PASSWORD identify the account being imported. In the
- *   common case where the owner IS the account being imported, set OWNER_IDENTIFIER
- *   to that same DID and reuse the app password.
+ * - IMPORTER_* is the account being promoted to a group (groupDid). It signs the
+ *   import JWT, so it must be able to mint a service-auth JWT proving control of
+ *   its DID; here that is a password login, so IMPORTER_PASSWORD must be real.
+ *   IMPORTER_APP_PASSWORD is the app password the service stores to act on it.
+ * - GROUP_OWNER_IDENTIFIER (handle or DID) identifies the account seeded as the
+ *   group's owner (ownerDid); a handle is resolved to a DID for the request body.
+ *   Common case: it is the importer's own account. It may differ; it is not
+ *   authenticated (no login as the owner).
  * - aud MUST equal the CGS's configured serviceDid. If the preview derives it
  *   from SERVICE_URL, the default below is correct; otherwise set CGS_SERVICE_DID.
  */
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
-import dotenv from 'dotenv'
+import { loadSmokeEnv, reqEnv, resolveToDid } from './lib.js'
 
-// Load ONLY the dedicated smoke-test env file (tests/smoke/.env, sitting next
-// to this script). Never the repo-root .env.
-const here = dirname(fileURLToPath(import.meta.url))
-const envFile = process.env.SMOKE_ENV_FILE || join(here, '.env')
-const loaded = dotenv.config({ path: envFile })
-if (loaded.error) {
-  console.error(`Could not read smoke-test env file: ${envFile}`)
-  console.error(`Copy ${join(here, '.env.example')} to ${envFile} and fill it in.`)
-  process.exit(2)
-}
-console.log(`Loaded smoke-test config from ${envFile}`)
+// Load ONLY the dedicated smoke-test env file (never the repo-root .env).
+loadSmokeEnv(import.meta.url)
 
 import { AtpAgent } from '@atproto/api'
+import { IdResolver } from '@atproto/identity'
 
 const IMPORT_NSID = 'app.certified.group.import'
 
-function reqEnv(name: string): string {
-  const v = process.env[name]
-  if (!v) {
-    console.error(`Missing required env var: ${name}`)
-    process.exit(2)
-  }
-  return v
-}
-
 async function main() {
   const cgsUrl = reqEnv('CGS_URL').replace(/\/$/, '')
-  const ownerPds = reqEnv('OWNER_PDS')
-  const ownerIdentifier = reqEnv('OWNER_IDENTIFIER')
-  const ownerPassword = reqEnv('OWNER_PASSWORD')
-  const importDid = reqEnv('IMPORT_DID')
-  const importAppPassword = reqEnv('IMPORT_APP_PASSWORD')
+  const importerPds = reqEnv('IMPORTER_PDS')
+  const importerIdentifier = reqEnv('IMPORTER_IDENTIFIER')
+  const importerPassword = reqEnv('IMPORTER_PASSWORD')
+  const importerAppPassword = reqEnv('IMPORTER_APP_PASSWORD')
+  const groupOwnerIdentifier = reqEnv('GROUP_OWNER_IDENTIFIER')
   const serviceDid = process.env.CGS_SERVICE_DID || `did:web:${new URL(cgsUrl).hostname}`
 
   console.log('CGS URL:        ', cgsUrl)
   console.log('CGS service DID:', serviceDid)
-  console.log('Owner PDS:      ', ownerPds)
-  console.log('Owner:          ', ownerIdentifier)
-  console.log('Import DID:     ', importDid)
+  console.log('Importer PDS:   ', importerPds)
+  console.log('Importer:       ', importerIdentifier)
+  console.log('Group owner:    ', groupOwnerIdentifier)
   console.log('---')
 
-  // 1) Log into the owner's PDS and mint a service-auth JWT for import.
-  console.log('Logging into owner PDS to mint service-auth JWT...')
-  const ownerAgent = new AtpAgent({ service: ownerPds })
-  await ownerAgent.login({ identifier: ownerIdentifier, password: ownerPassword })
-  const ownerDid = ownerAgent.session?.did
-  if (!ownerDid) throw new Error('Owner login did not yield a DID')
-  console.log('Owner DID resolved:', ownerDid)
+  // 1) Log into the IMPORTER's PDS and mint a service-auth JWT for import.
+  // Option a: the JWT must be signed by the account being imported, so iss is
+  // the importer's DID (= groupDid), not the group owner's.
+  console.log('Logging into importer PDS to mint service-auth JWT...')
+  const importerAgent = new AtpAgent({ service: importerPds })
+  await importerAgent.login({ identifier: importerIdentifier, password: importerPassword })
+  const groupDid = importerAgent.session?.did
+  if (!groupDid) throw new Error('Importer login did not yield a DID')
+  console.log('Importer DID resolved (groupDid):', groupDid)
 
   const {
     data: { token },
-  } = await ownerAgent.com.atproto.server.getServiceAuth({
+  } = await importerAgent.com.atproto.server.getServiceAuth({
     aud: serviceDid,
     lxm: IMPORT_NSID,
   })
   console.log('Minted service-auth JWT (aud =', serviceDid + ', lxm =', IMPORT_NSID + ')')
 
-  // 2) Call import on the CGS.
-  const body = { groupDid: importDid, appPassword: importAppPassword, ownerDid }
+  // The owner identifier may be a handle; the lexicon's ownerDid needs a DID.
+  const ownerDid = await resolveToDid(new IdResolver(), groupOwnerIdentifier)
+
+  // 2) Call import on the CGS. ownerDid is the (separately unauthenticated)
+  // grantee; groupDid is the importer that just signed the JWT.
+  const body = { groupDid, appPassword: importerAppPassword, ownerDid }
   console.log('---\nPOST', `${cgsUrl}/xrpc/${IMPORT_NSID}`)
   console.log('body:', { ...body, appPassword: '***redacted***' })
 

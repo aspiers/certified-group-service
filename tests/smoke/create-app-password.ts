@@ -1,15 +1,13 @@
 /**
- * Helper for the import smoke test: mint an app password for the account being
- * imported, so you can paste it into IMPORT_APP_PASSWORD in tests/smoke/.env.
+ * Helper for the import smoke test: mint an app password for the IMPORTER
+ * account (the one being promoted to a group), so you can paste it into
+ * IMPORTER_APP_PASSWORD in tests/smoke/.env.
  *
  * Creating an app password requires a FULL session (com.atproto.server
  * .createAppPassword needs the ACCESS_FULL scope), i.e. the account's real
- * password — an app password cannot mint another app password. This script
- * therefore uses the OWNER_* full credentials and only works in the common case
- * where the account being imported IS the owner account
- * (IMPORT_DID === OWNER_IDENTIFIER). If they differ, there is no full credential
- * for the import account in the env file, so the script refuses rather than
- * minting a password against the wrong account.
+ * password — an app password cannot mint another. This script logs in with
+ * IMPORTER_PASSWORD and mints on that same account, so no cross-account check
+ * is needed.
  *
  * Config comes from the same dedicated env file as the import smoke test
  * (tests/smoke/.env — separate from the repo-root .env, gitignored). It reads
@@ -20,23 +18,14 @@
  *   cd .../.claude/worktrees/adam+hyper-469-group-import
  *   npx tsx tests/smoke/create-app-password.ts
  *
- * Then copy the printed password into IMPORT_APP_PASSWORD in tests/smoke/.env.
+ * Then copy the printed password into IMPORTER_APP_PASSWORD in tests/smoke/.env.
  *
  * Override the env file path with SMOKE_ENV_FILE=/path/to/file if needed.
  */
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
-import dotenv from 'dotenv'
+import { loadSmokeEnv, reqEnv } from './lib.js'
 
-const here = dirname(fileURLToPath(import.meta.url))
-const envFile = process.env.SMOKE_ENV_FILE || join(here, '.env')
-const loaded = dotenv.config({ path: envFile })
-if (loaded.error) {
-  console.error(`Could not read smoke-test env file: ${envFile}`)
-  console.error(`Copy ${join(here, '.env.example')} to ${envFile} and fill it in.`)
-  process.exit(2)
-}
-console.log(`Loaded smoke-test config from ${envFile}`)
+// Load ONLY the dedicated smoke-test env file (never the repo-root .env).
+loadSmokeEnv(import.meta.url)
 
 import { AtpAgent } from '@atproto/api'
 
@@ -45,51 +34,26 @@ import { AtpAgent } from '@atproto/api'
 // the old one or pass APP_PASSWORD_NAME to override.
 const APP_PASSWORD_NAME = process.env.APP_PASSWORD_NAME || 'cgs-import-smoke'
 
-function reqEnv(name: string): string {
-  const v = process.env[name]
-  if (!v) {
-    console.error(`Missing required env var: ${name}`)
-    process.exit(2)
-  }
-  return v
-}
-
 async function main() {
-  const ownerPds = reqEnv('OWNER_PDS')
-  const ownerIdentifier = reqEnv('OWNER_IDENTIFIER')
-  const ownerPassword = reqEnv('OWNER_PASSWORD')
-  const importDid = reqEnv('IMPORT_DID')
+  const importerPds = reqEnv('IMPORTER_PDS')
+  const importerIdentifier = reqEnv('IMPORTER_IDENTIFIER')
+  const importerPassword = reqEnv('IMPORTER_PASSWORD')
 
-  console.log('Owner PDS:  ', ownerPds)
-  console.log('Owner:      ', ownerIdentifier)
-  console.log('Import DID: ', importDid)
+  console.log('Importer PDS:', importerPds)
+  console.log('Importer:    ', importerIdentifier)
   console.log('---')
 
-  console.log('Logging into owner PDS with full credentials...')
-  const agent = new AtpAgent({ service: ownerPds })
-  await agent.login({ identifier: ownerIdentifier, password: ownerPassword })
-  const sessionDid = agent.session?.did
-  if (!sessionDid) throw new Error('Login did not yield a DID')
-  console.log('Logged in as:', sessionDid)
-
-  // The full credentials authenticate the owner account. We can only mint an
-  // app password for THAT account, so it must be the one being imported.
-  if (sessionDid !== importDid) {
-    console.error(
-      `\n❌ IMPORT_DID (${importDid}) is not the owner account (${sessionDid}).\n` +
-        `   This script can only mint an app password for the account whose full\n` +
-        `   credentials are in the env file (the owner). To import a different\n` +
-        `   account, create its app password from its own PDS/owner directly.`,
-    )
-    process.exit(1)
-  }
+  console.log('Logging into importer PDS with full credentials...')
+  const agent = new AtpAgent({ service: importerPds })
+  await agent.login({ identifier: importerIdentifier, password: importerPassword })
+  console.log('Logged in as:', agent.session?.did)
 
   console.log(`Creating app password "${APP_PASSWORD_NAME}"...`)
   const { data } = await agent.com.atproto.server.createAppPassword({
     name: APP_PASSWORD_NAME,
   })
 
-  console.log('\n✅ App password created. Copy this into IMPORT_APP_PASSWORD:\n')
+  console.log('\n✅ App password created. Copy this into IMPORTER_APP_PASSWORD:\n')
   console.log('   ' + data.password)
   console.log('\n(Shown once; the PDS will not display it again.)')
 }
