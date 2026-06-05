@@ -120,6 +120,54 @@ describe('group.import', () => {
     await test.groupDb.destroy()
   })
 
+  it('rejects a non-https resolved PDS endpoint', async () => {
+    // We never POST the app password over cleartext http. (atproto's resolver
+    // already guarantees the value parses as http(s); we add the https check.)
+    const test = await createTestContext({
+      authVerifier: mockAuth('did:plc:existingaccount'),
+      idResolver: mockIdResolver('http://pds.example.com'),
+    })
+    const otherApp = createTestApp(test.ctx, groupImportHandler)
+
+    const res = await request(otherApp).post(ENDPOINT).send(validBody)
+    expect(res.status).toBe(400)
+    // Never attempted a login against the http endpoint, nothing persisted
+    expect(AtpAgent).not.toHaveBeenCalled()
+    const group = await test.globalDb
+      .selectFrom('groups')
+      .where('did', '=', 'did:plc:existingaccount')
+      .selectAll()
+      .executeTakeFirst()
+    expect(group).toBeUndefined()
+
+    await test.globalDb.destroy()
+    await test.groupDb.destroy()
+  })
+
+  it('returns 400 when the DID document has no PDS endpoint', async () => {
+    const test = await createTestContext({
+      authVerifier: mockAuth('did:plc:existingaccount'),
+      idResolver: {
+        did: {
+          resolveAtprotoData: async (did: string) => ({
+            did,
+            signingKey: 'did:key:zMock',
+            handle: 'x.example.com',
+            pds: undefined,
+          }),
+        },
+      } as any,
+    })
+    const otherApp = createTestApp(test.ctx, groupImportHandler)
+
+    const res = await request(otherApp).post(ENDPOINT).send(validBody)
+    expect(res.status).toBe(400)
+    expect(AtpAgent).not.toHaveBeenCalled()
+
+    await test.globalDb.destroy()
+    await test.groupDb.destroy()
+  })
+
   it('returns 400 when the groupDid DID document cannot be resolved', async () => {
     const test = await createTestContext({
       authVerifier: mockAuth('did:plc:existingaccount'),

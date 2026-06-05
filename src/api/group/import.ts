@@ -7,6 +7,33 @@ import { registerServiceAuthMethod, jsonResponse } from '../util.js'
 import { finalizeGroup } from './finalize.js'
 
 /**
+ * Require the PDS endpoint resolved from an imported account's DID document to
+ * be https before we send the app password to it (and store it for future
+ * logins). Unlike register — whose PDS is the operator-configured, trusted
+ * config.groupPdsUrl — import takes this URL from the account's own DID
+ * document. `@atproto/identity` already guarantees a resolved `pds` is a
+ * parseable http(s) URL (its getPdsEndpoint runs a protocol+parse check), so we
+ * only add the https requirement here: never POST an app password in cleartext,
+ * and reject plain-http internal targets.
+ *
+ * Residual SSRF risk (KNOWN, not handled here): this does not block an https
+ * endpoint pointing at an internal/loopback/metadata host, nor DNS rebinding.
+ * Proper egress filtering belongs at the HTTP-client / network layer rather
+ * than a hand-rolled host check; tracked as a follow-up hardening pass. The
+ * blast radius is limited — the caller controls groupDid and so only exposes
+ * its own app password — but a future pass should restrict outbound hosts.
+ */
+function assertHttpsPdsUrl(pds: string | undefined): string {
+  if (!pds) {
+    throw new InvalidRequestError('Account DID document has no PDS endpoint')
+  }
+  if (!pds.startsWith('https://')) {
+    throw new InvalidRequestError(`Account PDS endpoint must be https: ${pds}`)
+  }
+  return pds
+}
+
+/**
  * app.certified.group.import — promote an existing PDS account into a group.
  *
  * Sibling to group.register: where register creates a new account on the group
@@ -68,8 +95,13 @@ export default function (server: Server, ctx: AppContext) {
       } catch {
         throw new InvalidRequestError(`Could not resolve DID document for ${groupDid}`)
       }
-      const pdsUrl = atprotoData.pds
+      // The PDS endpoint comes from the account's DID document — require https
+      // before logging in there with the app password (see assertHttpsPdsUrl).
+      const pdsUrl = assertHttpsPdsUrl(atprotoData.pds)
       const handle = atprotoData.handle
+      if (!handle) {
+        throw new InvalidRequestError('Account DID document has no handle')
+      }
 
       // Authenticate to the account's PDS with the supplied app password. This
       // is a PDS-local createSession against the host PDS itself (no entryway),

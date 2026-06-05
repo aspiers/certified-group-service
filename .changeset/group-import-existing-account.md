@@ -6,7 +6,7 @@ You can now turn an existing account into a group, instead of always creating a 
 
 **Affects:** Client app developers, Operators
 
-**Client app developers:** a new procedure `app.certified.group.import` is the sibling of `app.certified.group.register`. Where `register` creates a new account on the group PDS, `import` reuses an account that already exists.
+**Client app developers:** a new procedure `app.certified.group.import` is the sibling of `app.certified.group.register`. Where `register` creates a new account on the group's PDS, `import` reuses an account that already exists.
 
 - Call it directly (like `register`, not via the proxy), with a service-auth JWT (`aud` = the group service DID, `lxm` = `app.certified.group.import`).
 - Request body: `{ groupDid, appPassword, ownerDid }`. `groupDid` is the existing account's DID; `appPassword` is an app password for that account so the service can act on its behalf; `ownerDid` is seeded as the group owner. The JWT must be signed by the account being imported — `iss` must equal `groupDid` (not `ownerDid`): the service authenticates the account being granted to the group, not the recipient owner, and an app password alone cannot mint that JWT. `ownerDid` is named but not separately authenticated and may differ from `groupDid`. The service resolves the account's PDS and handle from its DID document — no `handle` input.
