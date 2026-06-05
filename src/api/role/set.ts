@@ -1,15 +1,20 @@
 import type { Server } from '@atproto/xrpc-server'
 import { XRPCError } from '@atproto/xrpc-server'
 import type { AppContext } from '../../context.js'
-import { registerAuthedMethod, jsonResponse } from '../util.js'
+import { registerAuthedMethod, jsonResponse, resolveGroupDid } from '../util.js'
 import { ForbiddenError } from '../../errors.js'
 import { ROLE_HIERARCHY, type Role } from '../../rbac/permissions.js'
 
 export default function (server: Server, ctx: AppContext) {
   registerAuthedMethod(server, 'app.certified.group.role.set', ctx, {
     handler: async ({ auth, input }) => {
-      const { callerDid, groupDid } = auth.credentials
-      const { memberDid, role: newRole } = input?.body as {
+      const { callerDid } = auth.credentials
+      const {
+        repo,
+        memberDid,
+        role: newRole,
+      } = input?.body as {
+        repo?: string
         memberDid: string
         role: string
       }
@@ -22,6 +27,7 @@ export default function (server: Server, ctx: AppContext) {
         )
       }
 
+      const groupDid = await resolveGroupDid(ctx, auth.credentials, repo)
       const groupDb = ctx.groupDbs.get(groupDid)
 
       // RBAC check and target lookup are independent — run in parallel

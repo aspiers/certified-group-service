@@ -1,16 +1,17 @@
 import type { Server } from '@atproto/xrpc-server'
 import { XRPCError } from '@atproto/xrpc-server'
 import type { AppContext } from '../../context.js'
-import { registerAuthedMethod, jsonResponse } from '../util.js'
+import { registerAuthedMethod, jsonResponse, resolveGroupDid } from '../util.js'
 import { ForbiddenError } from '../../errors.js'
 import { ROLE_HIERARCHY, type Role } from '../../rbac/permissions.js'
 
 export default function (server: Server, ctx: AppContext) {
   registerAuthedMethod(server, 'app.certified.group.member.remove', ctx, {
     handler: async ({ auth, input: xrpcInput }) => {
-      const { callerDid, groupDid } = auth.credentials
-      const { memberDid } = xrpcInput?.body as { memberDid: string }
+      const { callerDid } = auth.credentials
+      const { repo, memberDid } = xrpcInput?.body as { repo?: string; memberDid: string }
 
+      const groupDid = await resolveGroupDid(ctx, auth.credentials, repo)
       const groupDb = ctx.groupDbs.get(groupDid)
 
       // Fetch target role and (for non-self removal) RBAC check in parallel

@@ -50,13 +50,16 @@ describe('createRecord', () => {
     expect(authors[0].author_did).toBe('did:plc:testuser')
   })
 
-  it('rejects repo DID mismatch', async () => {
+  it('rejects an unregistered repo (resolves to no known group)', async () => {
+    // Post-#27: `repo` is the group selector, not a cross-check against `aud`.
+    // A repo that names no registered group is rejected at resolution, not as a
+    // 403 "mismatch".
     const res = await request(app).post('/xrpc/com.atproto.repo.createRecord').send({
       repo: 'did:plc:wrong',
       collection: 'app.bsky.feed.post',
       record: {},
     })
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(401)
   })
 
   it('rejects non-members', async () => {
@@ -205,13 +208,13 @@ describe('deleteRecord', () => {
     expect(detail.reason).toBeDefined()
   })
 
-  it('repo DID mismatch returns 403', async () => {
+  it('rejects an unregistered repo on delete (resolves to no known group)', async () => {
     const res = await request(app).post('/xrpc/com.atproto.repo.deleteRecord').send({
       repo: 'did:plc:wrong',
       collection: 'app.bsky.feed.post',
       rkey: 'abc',
     })
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(401)
   })
 
   it('authorship cleaned up after successful delete', async () => {

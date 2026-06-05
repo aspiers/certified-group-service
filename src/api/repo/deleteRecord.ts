@@ -5,24 +5,22 @@ import {
   jsonResponse,
   assertCanWithAudit,
   proxyToPds,
+  resolveGroupDid,
   type AuthedMethodConfig,
 } from '../util.js'
-import { ForbiddenError } from '../../errors.js'
 import type { Operation } from '../../rbac/permissions.js'
 
 export default function (server: Server, ctx: AppContext) {
   const config: AuthedMethodConfig = {
     handler: async ({ auth, input: xrpcInput }) => {
-      const { callerDid, groupDid } = auth.credentials
+      const { callerDid } = auth.credentials
       const input = xrpcInput?.body as {
         repo: string
         collection: string
         rkey: string
       }
 
-      if (input.repo !== groupDid) {
-        throw new ForbiddenError('repo field must match the group DID')
-      }
+      const groupDid = await resolveGroupDid(ctx, auth.credentials, input.repo)
 
       const groupDb = ctx.groupDbs.get(groupDid)
       const recordUri = `at://${groupDid}/${input.collection}/${input.rkey}`
@@ -34,8 +32,10 @@ export default function (server: Server, ctx: AppContext) {
         rkey: input.rkey,
       })
 
+      // Send the resolved group DID as `repo` — the caller may have supplied a
+      // handle, which the PDS won't accept.
       await proxyToPds(ctx.pdsAgents, groupDid, (agent) =>
-        agent.com.atproto.repo.deleteRecord(input),
+        agent.com.atproto.repo.deleteRecord({ ...input, repo: groupDid }),
       )
 
       await Promise.all([

@@ -1,4 +1,5 @@
 import type { Server, MethodHandler, RouteOptions } from '@atproto/xrpc-server'
+import type { Response as ExpressResponse } from 'express'
 import type { Kysely } from 'kysely'
 import type { AppContext } from '../context.js'
 import type { GroupAuthResult, ServiceAuthResult } from '../auth/verifier.js'
@@ -21,6 +22,31 @@ export interface ServiceAuthMethodConfig {
 
 export function jsonResponse<T>(body: T) {
   return { encoding: 'application/json' as const, body }
+}
+
+/**
+ * Resolve the target group for an authed request.
+ *
+ * Queries set `groupDid` on the credential at the verifier (from the `repo`
+ * querystring or the legacy `aud` overload). Body-input methods leave it
+ * undefined on the new path and pass the group as `repo` in the body, which the
+ * verifier cannot read; this resolves that body `repo` (handle or DID) to a
+ * registered group DID.
+ *
+ * Precedence mirrors the verifier: an explicit body `repo` wins (new path); if
+ * absent, the credential's `aud`-derived `groupDid` is used (legacy path). One
+ * of the two must be present.
+ */
+export async function resolveGroupDid(
+  ctx: AppContext,
+  credentials: { groupDid?: string },
+  bodyRepo: string | undefined,
+): Promise<string> {
+  if (bodyRepo !== undefined && bodyRepo.length > 0) {
+    return ctx.authVerifier.resolveRepoToGroup(bodyRepo)
+  }
+  if (credentials.groupDid) return credentials.groupDid
+  throw new XRPCError(400, 'Missing repo', 'InvalidRequest')
 }
 
 /** Convert a SQLite DATETIME string (no timezone) to ISO 8601. */
@@ -85,16 +111,54 @@ export async function proxyToPds<T>(
   }
 }
 
+/**
+ * Link to the deprecation explanation, surfaced in the RFC 8594 `Link` header
+ * on legacy-`aud` responses.
+ */
+const DEPRECATION_INFO_URL =
+  'https://github.com/hypercerts-org/certified-group-service/issues/27'
+
+/** One warn per caller-DID per this window, to keep legacy traffic from flooding logs. */
+const LEGACY_WARN_WINDOW_MS = 15 * 60 * 1000
+const lastLegacyWarn = new Map<string, number>()
+
+/**
+ * Signal the deprecated `aud`-as-group path (issue #27) on a per-request basis:
+ * attach RFC 8594 headers so clients can detect it programmatically, and emit a
+ * rate-limited warn so operators can see lingering legacy traffic. No `Sunset`
+ * header — a removal date is not yet set.
+ */
+function signalLegacyAud(ctx: AppContext, res: ExpressResponse, callerDid: string, nsid: string) {
+  res.setHeader('Deprecation', 'true')
+  res.setHeader('Link', `<${DEPRECATION_INFO_URL}>; rel="deprecation"`)
+
+  const now = Date.now()
+  const previous = lastLegacyWarn.get(callerDid)
+  if (previous === undefined || now - previous >= LEGACY_WARN_WINDOW_MS) {
+    lastLegacyWarn.set(callerDid, now)
+    ctx.logger.warn(
+      { callerDid, nsid },
+      'Deprecated auth: group taken from JWT aud. Pass an explicit `repo` and set aud to the service DID (issue #27).',
+    )
+  }
+}
+
 export function registerAuthedMethod(
   server: Server,
   nsid: string,
   ctx: AppContext,
   config: AuthedMethodConfig,
 ): void {
+  const handler: MethodHandler<GroupAuthResult> = async (reqCtx) => {
+    if (reqCtx.auth.credentials.legacyAud) {
+      signalLegacyAud(ctx, reqCtx.res, reqCtx.auth.credentials.callerDid, nsid)
+    }
+    return config.handler(reqCtx)
+  }
   server.method(nsid, {
     auth: ctx.authVerifier.xrpcAuth(),
     opts: config.opts,
-    handler: config.handler,
+    handler,
   })
 }
 

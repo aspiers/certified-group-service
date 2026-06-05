@@ -5,15 +5,15 @@ import {
   jsonResponse,
   assertCanWithAudit,
   proxyToPds,
+  resolveGroupDid,
   type AuthedMethodConfig,
 } from '../util.js'
-import { ForbiddenError } from '../../errors.js'
 import type { Operation } from '../../rbac/permissions.js'
 
 export default function (server: Server, ctx: AppContext) {
   const config: AuthedMethodConfig = {
     handler: async ({ auth, input: xrpcInput }) => {
-      const { callerDid, groupDid } = auth.credentials
+      const { callerDid } = auth.credentials
       const input = xrpcInput?.body as {
         repo: string
         collection: string
@@ -21,9 +21,7 @@ export default function (server: Server, ctx: AppContext) {
         record: { [x: string]: unknown }
       }
 
-      if (input.repo !== groupDid) {
-        throw new ForbiddenError('repo field must match the group DID')
-      }
+      const groupDid = await resolveGroupDid(ctx, auth.credentials, input.repo)
 
       const groupDb = ctx.groupDbs.get(groupDid)
 
@@ -54,9 +52,10 @@ export default function (server: Server, ctx: AppContext) {
         rkey: input.rkey,
       })
 
-      // Forward to group's PDS
+      // Forward to group's PDS. Send the resolved group DID as `repo` — the
+      // caller may have supplied a handle, which the PDS won't accept.
       const response = await proxyToPds(ctx.pdsAgents, groupDid, (agent) =>
-        agent.com.atproto.repo.putRecord(input),
+        agent.com.atproto.repo.putRecord({ ...input, repo: groupDid }),
       )
 
       const postOps: Promise<unknown>[] = [

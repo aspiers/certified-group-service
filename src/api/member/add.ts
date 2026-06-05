@@ -2,15 +2,16 @@ import type { Server } from '@atproto/xrpc-server'
 import { XRPCError } from '@atproto/xrpc-server'
 import { ensureValidDid } from '@atproto/syntax'
 import type { AppContext } from '../../context.js'
-import { registerAuthedMethod, jsonResponse, sqliteToIso } from '../util.js'
+import { registerAuthedMethod, jsonResponse, sqliteToIso, resolveGroupDid } from '../util.js'
 import { ConflictError, ForbiddenError } from '../../errors.js'
 import { ASSIGNABLE_ROLES, ROLE_HIERARCHY, type Role } from '../../rbac/permissions.js'
 
 export default function (server: Server, ctx: AppContext) {
   registerAuthedMethod(server, 'app.certified.group.member.add', ctx, {
     handler: async ({ auth, input: xrpcInput }) => {
-      const { callerDid, groupDid } = auth.credentials
-      const { memberDid, role } = xrpcInput?.body as {
+      const { callerDid } = auth.credentials
+      const { repo, memberDid, role } = xrpcInput?.body as {
+        repo?: string
         memberDid: string
         role: Role
       }
@@ -25,6 +26,7 @@ export default function (server: Server, ctx: AppContext) {
         )
       }
 
+      const groupDid = await resolveGroupDid(ctx, auth.credentials, repo)
       const groupDb = ctx.groupDbs.get(groupDid)
       const groupRaw = ctx.groupDbs.getRaw(groupDid)
 
