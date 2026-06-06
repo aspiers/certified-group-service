@@ -8,8 +8,9 @@ import { AuthVerifier } from '../src/auth/verifier.js'
 function makeReq(
   headers: Record<string, string> = {},
   path = '/xrpc/com.atproto.repo.createRecord',
+  query: Record<string, string> = {},
 ) {
-  return { headers, originalUrl: path, path } as any
+  return { headers, originalUrl: path, path, query } as any
 }
 
 describe('AuthVerifier', () => {
@@ -17,11 +18,22 @@ describe('AuthVerifier', () => {
   let nonceCache: NonceCache
   let verifier: AuthVerifier
 
+  const SERVICE_DID = 'did:web:test.example.com'
+
   const fakeVerifyJwt = vi.fn()
   const fakeParseReqNsid = vi.fn()
   const mockIdResolver = {
     did: {
       resolveAtprotoData: vi.fn().mockResolvedValue({ signingKey: 'test-signing-key' }),
+    },
+    handle: {
+      // 'group.example.com' resolves to the registered test group; anything
+      // else resolves to nothing (an unknown handle).
+      resolve: vi
+        .fn()
+        .mockImplementation(async (handle: string) =>
+          handle === 'group.example.com' ? 'did:plc:testgroup' : undefined,
+        ),
     },
   }
 
@@ -42,7 +54,7 @@ describe('AuthVerifier', () => {
       mockIdResolver as any,
       nonceCache,
       globalDb,
-      'did:web:test.example.com',
+      SERVICE_DID,
       fakeVerifyJwt,
       fakeParseReqNsid,
     )
@@ -126,9 +138,13 @@ describe('AuthVerifier', () => {
     )
   })
 
-  it('accepts valid token and returns iss/aud', async () => {
+  it('accepts a legacy aud=group token and flags legacyAud', async () => {
     const result = await verifier.verify(makeReq({ authorization: 'Bearer jwt' }))
-    expect(result).toEqual({ iss: 'did:plc:caller', aud: 'did:plc:testgroup' })
+    expect(result).toEqual({
+      iss: 'did:plc:caller',
+      groupDid: 'did:plc:testgroup',
+      legacyAud: true,
+    })
   })
 
   it('rejects token where exp - iat exceeds nonce TTL', async () => {
@@ -167,7 +183,11 @@ describe('AuthVerifier', () => {
       exp: now + NONCE_TTL_SECONDS,
     })
     const result = await verifier.verify(makeReq({ authorization: 'Bearer jwt' }))
-    expect(result).toEqual({ iss: 'did:plc:caller', aud: 'did:plc:testgroup' })
+    expect(result).toEqual({
+      iss: 'did:plc:caller',
+      groupDid: 'did:plc:testgroup',
+      legacyAud: true,
+    })
   })
 
   it('enforces token lifetime in verifyServiceAuth', async () => {
@@ -204,6 +224,103 @@ describe('AuthVerifier', () => {
     const key = await getSigningKey('did:plc:caller', false)
     expect(key).toBe('test-signing-key')
     expect(mockIdResolver.did.resolveAtprotoData).toHaveBeenCalledWith('did:plc:caller', false)
+  })
+
+  // --- New path (#27 fix): explicit `repo` + aud = service DID ---
+
+  /** Mint a token whose aud is the service DID (the corrected meaning). */
+  function mockServiceAudToken(jti = 'jti-new') {
+    const now = Math.floor(Date.now() / 1000)
+    fakeVerifyJwt.mockResolvedValue({
+      iss: 'did:plc:caller',
+      aud: SERVICE_DID,
+      jti,
+      iat: now,
+      exp: now + 60,
+    })
+  }
+
+  it('new path: querystring repo DID + aud=serviceDid resolves the group, not legacy', async () => {
+    mockServiceAudToken()
+    const result = await verifier.verify(
+      makeReq({ authorization: 'Bearer jwt' }, '/xrpc/app.certified.group.member.list', {
+        repo: 'did:plc:testgroup',
+      }),
+    )
+    expect(result).toEqual({
+      iss: 'did:plc:caller',
+      groupDid: 'did:plc:testgroup',
+      legacyAud: false,
+    })
+  })
+
+  it('new path: querystring repo as a handle is resolved to the group DID', async () => {
+    mockServiceAudToken()
+    const result = await verifier.verify(
+      makeReq({ authorization: 'Bearer jwt' }, '/xrpc/app.certified.group.member.list', {
+        repo: 'group.example.com',
+      }),
+    )
+    expect(result.groupDid).toBe('did:plc:testgroup')
+    expect(result.legacyAud).toBe(false)
+    expect(mockIdResolver.handle.resolve).toHaveBeenCalledWith('group.example.com')
+  })
+
+  it('new path: explicit repo wins even when aud is also the group DID (no legacy flag)', async () => {
+    // A mid-migration caller that added `repo` but still sets aud=groupDid.
+    const now = Math.floor(Date.now() / 1000)
+    fakeVerifyJwt.mockResolvedValue({
+      iss: 'did:plc:caller',
+      aud: 'did:plc:testgroup',
+      jti: 'jti-both',
+      iat: now,
+      exp: now + 60,
+    })
+    // aud is the group, not the service DID — but repo is present, so the new
+    // path applies and the aud check must be against the service DID.
+    await expect(
+      verifier.verify(
+        makeReq({ authorization: 'Bearer jwt' }, '/xrpc/app.certified.group.member.list', {
+          repo: 'did:plc:testgroup',
+        }),
+      ),
+    ).rejects.toThrow('jwt audience does not match service did')
+  })
+
+  it('new path: repo present but aud is neither service nor anything valid → rejected', async () => {
+    mockServiceAudToken() // aud = service DID (correct)
+    // wrong: repo names an unregistered group
+    await expect(
+      verifier.verify(
+        makeReq({ authorization: 'Bearer jwt' }, '/xrpc/app.certified.group.member.list', {
+          repo: 'did:plc:unregistered',
+        }),
+      ),
+    ).rejects.toThrow('Unknown group')
+  })
+
+  it('new path: aud=serviceDid with no repo (a procedure) returns no group, deferring to the handler', async () => {
+    mockServiceAudToken()
+    const result = await verifier.verify(
+      makeReq({ authorization: 'Bearer jwt' }, '/xrpc/com.atproto.repo.createRecord'),
+    )
+    expect(result).toEqual({
+      iss: 'did:plc:caller',
+      groupDid: undefined,
+      legacyAud: false,
+    })
+  })
+
+  it('resolveRepoToGroup rejects an unknown handle', async () => {
+    await expect(verifier.resolveRepoToGroup('nope.example.com')).rejects.toThrow(
+      'Could not resolve repo to a DID',
+    )
+  })
+
+  it('resolveRepoToGroup rejects a DID that is not a registered group', async () => {
+    await expect(verifier.resolveRepoToGroup('did:plc:unregistered')).rejects.toThrow(
+      'Unknown group',
+    )
   })
 })
 

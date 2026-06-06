@@ -14,6 +14,9 @@ export default function (server: Server, ctx: AppContext) {
   registerAuthedMethod(server, 'app.certified.group.member.list', ctx, {
     handler: async ({ auth, params }) => {
       const { callerDid, groupDid } = auth.credentials
+      if (!groupDid) {
+        throw new XRPCError(400, 'Missing repo', 'InvalidRequest')
+      }
       const groupDb = ctx.groupDbs.get(groupDid)
 
       // RBAC: any member can list members

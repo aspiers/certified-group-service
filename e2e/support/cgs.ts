@@ -11,8 +11,12 @@
  *
  * Auth facts baked in (verified against src/auth/verifier.ts):
  *  - service-level methods (group.import / group.register): aud = the SERVICE DID.
- *  - group-scoped methods (everything else): aud = the GROUP DID (which must
- *    already be imported, or the verifier rejects with Invalid audience).
+ *  - group-scoped methods (everything else) accept two forms (#27):
+ *      - NEW: aud = the SERVICE DID, with the group named by an explicit `repo`
+ *        (querystring for queries/uploadBlob/destroy, request body for the
+ *        member/role procedures and createRecord/putRecord/deleteRecord).
+ *      - LEGACY (deprecated): aud = the GROUP DID, no `repo`. Still works, but
+ *        the response carries an RFC 8594 `Deprecation` header.
  *  - tokens are single-use (jti replay protection) and short-lived (exp - iat <=
  *    120s), so mint a FRESH token for every call — never reuse one.
  */
@@ -53,6 +57,7 @@ export interface HttpSink {
   lastHttpStatus?: number
   lastHttpJson?: Record<string, unknown>
   lastHttpBody?: string
+  lastHttpHeaders?: Headers
 }
 
 export interface CallOpts {
@@ -62,17 +67,29 @@ export interface CallOpts {
   body?: unknown
   /** Defaults to POST; queries (member.list, audit.query, membership.list) use GET. */
   method?: 'GET' | 'POST'
+  /**
+   * Explicit group target for the #27 new path, sent as the `repo` querystring.
+   * Use for query methods (and uploadBlob/destroy). Procedures that take a JSON
+   * body name the group via `body.repo` instead.
+   */
+  repo?: string
+}
+
+/** Append a `repo` querystring param to an /xrpc/<nsid> URL if provided. */
+function xrpcUrl(cgsUrl: string, nsid: string, repo?: string): string {
+  const url = `${cgsUrl}/xrpc/${nsid}`
+  return repo ? `${url}?repo=${encodeURIComponent(repo)}` : url
 }
 
 /**
- * Call an XRPC method with a Bearer token and record status/json/body on the
- * sink. JSON Content-Type is set only when a JSON body is present.
+ * Call an XRPC method with a Bearer token and record status/json/body/headers on
+ * the sink. JSON Content-Type is set only when a JSON body is present.
  */
 export async function callXrpc(sink: HttpSink, opts: CallOpts): Promise<void> {
   const headers: Record<string, string> = { Authorization: `Bearer ${opts.token}` }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
 
-  const res = await fetch(`${opts.cgsUrl}/xrpc/${opts.nsid}`, {
+  const res = await fetch(xrpcUrl(opts.cgsUrl, opts.nsid, opts.repo), {
     method: opts.method ?? 'POST',
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
@@ -88,12 +105,19 @@ export async function callXrpc(sink: HttpSink, opts: CallOpts): Promise<void> {
  */
 export async function uploadBlobXrpc(
   sink: HttpSink,
-  opts: { cgsUrl: string; token: string; bytes: ArrayBuffer; contentType: string },
+  opts: {
+    cgsUrl: string
+    token: string
+    bytes: ArrayBuffer
+    contentType: string
+    /** Explicit group target for the #27 new path (querystring), since the body is the blob. */
+    repo?: string
+  },
 ): Promise<void> {
   // Wrap the raw bytes in a Blob so the body is a BodyInit the fetch typings
   // accept across lib configs (a bare Uint8Array is rejected by some). An
   // ArrayBuffer is an unambiguous BlobPart in every lib config.
-  const res = await fetch(`${opts.cgsUrl}/xrpc/app.certified.group.repo.uploadBlob`, {
+  const res = await fetch(xrpcUrl(opts.cgsUrl, 'app.certified.group.repo.uploadBlob', opts.repo), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${opts.token}`,
@@ -109,6 +133,7 @@ async function recordResponse(sink: HttpSink, res: Response): Promise<void> {
   const text = await res.text()
   sink.lastHttpStatus = res.status
   sink.lastHttpBody = text
+  sink.lastHttpHeaders = res.headers
   try {
     sink.lastHttpJson = JSON.parse(text) as Record<string, unknown>
   } catch {

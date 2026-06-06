@@ -3,12 +3,41 @@
 All endpoints (except `/health`) require authentication via a signed JWT in the `Authorization: Bearer <token>` header. The JWT must include:
 
 - `iss` — the caller's DID
-- `aud` — the target group's DID (or the service DID for cross-group queries)
+- `aud` — the **service DID** (its standard RFC 7519 meaning: the audience is the service receiving the request)
 - `lxm` — the XRPC method being called
 - `jti` — a unique nonce (each token can only be used once)
 - `exp` — expiration timestamp
 
-Most endpoints target a specific group (`aud` = group DID). Cross-group endpoints under `app.certified.groups.*` target the service itself (`aud` = service DID).
+## Targeting a group
+
+Group-scoped methods name their target group with an explicit `repo` field — an `at-identifier` (a handle **or** a DID), resolved to the group DID server-side. The JWT `aud` is the service DID. Where `repo` goes depends on the method kind:
+
+- **Query methods** (`member.list`, `audit.query`) and **raw-body / body-less methods** (`repo.uploadBlob`, `group.destroy`) read `repo` from the **querystring** (`?repo=<handle-or-did>`).
+- **JSON-body procedures** (`createRecord`, `putRecord`, `deleteRecord`, `member.add`, `member.remove`, `role.set`) read `repo` from the request **body**.
+
+`repo` is the group selector itself; the service enforces authorization per-group via RBAC (membership/role), so a caller can only act on groups they already hold a role in. A `repo` that names no registered group is rejected with `401 Unknown group`; a handle that does not resolve is rejected with `401 Could not resolve repo to a DID`. The `repo` value is **not** covered by the JWT signature — the service-auth JWT signs only `iss`/`aud`/`exp`/`lxm`/`jti`, matching standard atproto, which never signs the resource. See `docs/design/aud-deprecation.md` for the security rationale.
+
+Cross-group endpoints under `app.certified.groups.*` and the group-lifecycle methods `register` / `import` target the service itself (`aud` = service DID) and take no `repo`.
+
+## Legacy `aud` = group DID form (deprecated)
+
+A transitional form remains accepted during the migration window: set the JWT `aud` to the **group DID** (omitting `repo`). This is **deprecated** (issue [#27](https://github.com/hypercerts-org/certified-group-service/issues/27)) and will be removed in a later release once clients migrate.
+
+The deprecation is keyed off `aud`, because the service determines it at the auth layer — which sees the querystring but **not** the request body (auth runs before body parsing). Concretely:
+
+- **Query methods** (and `uploadBlob` / `destroy`, which carry `repo` on the querystring): adding `?repo=` moves you onto the new path immediately. With `repo` present, `aud` **must** be the service DID, or the request is rejected with `jwt audience does not match service did`.
+- **JSON-body procedures** (`createRecord`, `member.add`, …): a request is treated as legacy whenever `aud` is a group DID, **even if `repo` is in the body** — the body is invisible at auth time, so it cannot suppress the deprecation signal. To fully migrate such a call, set `aud` to the service DID (the body `repo` is then the group selector).
+
+In all cases, the way off the deprecated path is to set `aud` to the service DID.
+
+Responses served via the legacy path carry RFC 8594 deprecation headers:
+
+```text
+Deprecation: true
+Link: <https://github.com/hypercerts-org/certified-group-service/issues/27>; rel="deprecation"
+```
+
+There is no `Sunset` header yet, as the removal date is undecided.
 
 ## Health check
 
@@ -117,9 +146,9 @@ Remove the group from the service.
 
 The service-level inverse of `register` / `import`: it removes the group's stored credentials, membership, and per-group data. It does **not** delete the underlying PDS account — the DID, handle, and repo continue to exist, so the account can be re-imported afterwards with `app.certified.group.import`.
 
-**Request body:** none. The target group is taken from the JWT `aud` claim.
+**Request body:** none. The target group is named by the `repo` querystring parameter (`?repo=<handle-or-did>`), with JWT `aud` = service DID.
 
-> The `aud` = group DID form is being deprecated (issue #27): a future release reads the group from an explicit request field and expects `aud` = service DID. `destroy` will gain a group field at that point.
+> The legacy `aud` = group DID form (no `repo`) still works but is deprecated; see [Targeting a group](#targeting-a-group).
 
 **Response (200):**
 
@@ -131,11 +160,12 @@ The service-level inverse of `register` / `import`: it removes the group's store
 
 **Errors:**
 
-| Code | Name                   | Description                                |
-| ---- | ---------------------- | ------------------------------------------ |
-| 401  | AuthenticationRequired | Missing or invalid JWT                     |
-| 403  | Forbidden              | Caller lacks the owner role                |
-| 404  | GroupNotFound          | The group is not registered on the service |
+| Code | Name                   | Description                                            |
+| ---- | ---------------------- | ------------------------------------------------------ |
+| 401  | AuthenticationRequired | Missing or invalid JWT                                 |
+| 401  | Unknown group          | `repo` names no registered group (or fails to resolve) |
+| 403  | Forbidden              | Caller lacks the owner role                            |
+| 404  | GroupNotFound          | The group is not registered on the service             |
 
 Because the per-group data (including the audit log) is deleted, the destroy is **not** written to the group's audit log — it is recorded only in the service's operational log.
 
@@ -154,6 +184,8 @@ Alias: `POST /xrpc/app.certified.group.repo.createRecord`
 Create a new record in the group's repository.
 
 **Required role:** member
+
+The target group is named by the `repo` body field (a handle or DID), with JWT `aud` = service DID. The legacy `aud` = group DID form (no `repo`) still works but is deprecated; see [Targeting a group](#targeting-a-group).
 
 **Request body:**
 
@@ -181,10 +213,11 @@ Create a new record in the group's repository.
 
 **Errors:**
 
-| Code | Name                   | Description                                                      |
-| ---- | ---------------------- | ---------------------------------------------------------------- |
-| 401  | AuthenticationRequired | Missing or invalid JWT                                           |
-| 403  | Forbidden              | `repo` does not match the group DID, or caller lacks member role |
+| Code | Name                   | Description                                            |
+| ---- | ---------------------- | ------------------------------------------------------ |
+| 401  | AuthenticationRequired | Missing or invalid JWT                                 |
+| 401  | Unknown group          | `repo` names no registered group (or fails to resolve) |
+| 403  | Forbidden              | Caller lacks member role                               |
 
 **Example:**
 
@@ -220,6 +253,8 @@ Update an existing record or create one at a specific key.
 | Updating another member's record                   | `putAnyRecord`      | admin         |
 | Creating a new record (no existing author)         | `createRecord`      | member        |
 
+The target group is named by the `repo` body field (a handle or DID), with JWT `aud` = service DID. The legacy `aud` = group DID form (no `repo`) still works but is deprecated; see [Targeting a group](#targeting-a-group).
+
 **Request body:**
 
 ```json
@@ -246,10 +281,11 @@ Update an existing record or create one at a specific key.
 
 **Errors:**
 
-| Code | Name                   | Description                                                                           |
-| ---- | ---------------------- | ------------------------------------------------------------------------------------- |
-| 401  | AuthenticationRequired | Missing or invalid JWT                                                                |
-| 403  | Forbidden              | `repo` does not match the group DID, or caller lacks required role for this operation |
+| Code | Name                   | Description                                            |
+| ---- | ---------------------- | ------------------------------------------------------ |
+| 401  | AuthenticationRequired | Missing or invalid JWT                                 |
+| 401  | Unknown group          | `repo` names no registered group (or fails to resolve) |
+| 403  | Forbidden              | Caller lacks required role for this operation          |
 
 **Example:**
 
@@ -284,6 +320,8 @@ Delete a record from the group's repository.
 | Deleting a record you authored   | `deleteOwnRecord` | member        |
 | Deleting another member's record | `deleteAnyRecord` | admin         |
 
+The target group is named by the `repo` body field (a handle or DID), with JWT `aud` = service DID. The legacy `aud` = group DID form (no `repo`) still works but is deprecated; see [Targeting a group](#targeting-a-group).
+
 **Request body:**
 
 ```json
@@ -302,10 +340,11 @@ Delete a record from the group's repository.
 
 **Errors:**
 
-| Code | Name                   | Description                                                        |
-| ---- | ---------------------- | ------------------------------------------------------------------ |
-| 401  | AuthenticationRequired | Missing or invalid JWT                                             |
-| 403  | Forbidden              | `repo` does not match the group DID, or caller lacks required role |
+| Code | Name                   | Description                                            |
+| ---- | ---------------------- | ------------------------------------------------------ |
+| 401  | AuthenticationRequired | Missing or invalid JWT                                 |
+| 401  | Unknown group          | `repo` names no registered group (or fails to resolve) |
+| 403  | Forbidden              | Caller lacks required role                             |
 
 **Example:**
 
@@ -330,6 +369,8 @@ Upload a blob (image, file, etc.) to the group's PDS.
 
 **Required role:** member
 
+The request body is the raw blob bytes, so the target group is named by the `repo` querystring parameter (`?repo=<handle-or-did>`), with JWT `aud` = service DID. The legacy `aud` = group DID form (no `repo`) still works but is deprecated; see [Targeting a group](#targeting-a-group).
+
 **Request:**
 
 - Send the raw binary data as the request body
@@ -351,16 +392,17 @@ Upload a blob (image, file, etc.) to the group's PDS.
 
 **Errors:**
 
-| Code | Name                   | Description                                 |
-| ---- | ---------------------- | ------------------------------------------- |
-| 400  | BlobTooLarge           | Blob exceeds `MAX_BLOB_SIZE` (default 5 MB) |
-| 401  | AuthenticationRequired | Missing or invalid JWT                      |
-| 403  | Forbidden              | Caller lacks member role                    |
+| Code | Name                   | Description                                            |
+| ---- | ---------------------- | ------------------------------------------------------ |
+| 400  | BlobTooLarge           | Blob exceeds `MAX_BLOB_SIZE` (default 5 MB)            |
+| 401  | AuthenticationRequired | Missing or invalid JWT                                 |
+| 401  | Unknown group          | `repo` names no registered group (or fails to resolve) |
+| 403  | Forbidden              | Caller lacks member role                               |
 
 **Example:**
 
 ```bash
-curl -X POST https://group-service.example.com/xrpc/com.atproto.repo.uploadBlob \
+curl -X POST "https://group-service.example.com/xrpc/com.atproto.repo.uploadBlob?repo=did:plc:group123" \
   -H "Authorization: Bearer $JWT" \
   -H "Content-Type: image/png" \
   --data-binary @photo.png
@@ -376,10 +418,13 @@ Add a new member to the group.
 
 **Required role:** admin
 
+The target group is named by the optional `repo` body field (a handle or DID), with JWT `aud` = service DID. The legacy `aud` = group DID form (no `repo`) still works but is deprecated; see [Targeting a group](#targeting-a-group).
+
 **Request body:**
 
 ```json
 {
+  "repo": "did:plc:group123",
   "memberDid": "did:plc:newmember",
   "role": "member"
 }
@@ -414,6 +459,7 @@ curl -X POST https://group-service.example.com/xrpc/app.certified.group.member.a
   -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" \
   -d '{
+    "repo": "did:plc:group123",
     "memberDid": "did:plc:newmember",
     "role": "member"
   }'
@@ -427,10 +473,13 @@ Remove a member from the group.
 
 **Required role:** admin (or any role for self-removal)
 
+The target group is named by the optional `repo` body field (a handle or DID), with JWT `aud` = service DID. The legacy `aud` = group DID form (no `repo`) still works but is deprecated; see [Targeting a group](#targeting-a-group).
+
 **Request body:**
 
 ```json
 {
+  "repo": "did:plc:group123",
   "memberDid": "did:plc:targetmember"
 }
 ```
@@ -457,6 +506,7 @@ curl -X POST https://group-service.example.com/xrpc/app.certified.group.member.r
   -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" \
   -d '{
+    "repo": "did:plc:group123",
     "memberDid": "did:plc:targetmember"
   }'
 ```
@@ -469,10 +519,13 @@ List group members with pagination.
 
 **Required role:** member
 
+The target group is named by the `repo` querystring parameter (`?repo=<handle-or-did>`), with JWT `aud` = service DID. The legacy `aud` = group DID form (no `repo`) still works but is deprecated; see [Targeting a group](#targeting-a-group).
+
 **Query parameters:**
 
 | Parameter | Type   | Default | Description                                |
 | --------- | ------ | ------- | ------------------------------------------ |
+| `repo`    | string | —       | Target group (handle or DID); see above    |
 | `limit`   | number | 50      | Results per page (1-100)                   |
 | `cursor`  | string | —       | Pagination cursor from a previous response |
 
@@ -503,7 +556,7 @@ Members are ordered by `added_at ASC, member_did ASC`. The cursor is a base64-en
 **Example:**
 
 ```bash
-curl "https://group-service.example.com/xrpc/app.certified.group.member.list?limit=10" \
+curl "https://group-service.example.com/xrpc/app.certified.group.member.list?repo=did:plc:group123&limit=10" \
   -H "Authorization: Bearer $JWT"
 ```
 
@@ -515,10 +568,13 @@ Change a member's role.
 
 **Required role:** owner
 
+The target group is named by the optional `repo` body field (a handle or DID), with JWT `aud` = service DID. The legacy `aud` = group DID form (no `repo`) still works but is deprecated; see [Targeting a group](#targeting-a-group).
+
 **Request body:**
 
 ```json
 {
+  "repo": "did:plc:group123",
   "memberDid": "did:plc:targetmember",
   "role": "admin"
 }
@@ -553,6 +609,7 @@ curl -X POST https://group-service.example.com/xrpc/app.certified.group.role.set
   -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" \
   -d '{
+    "repo": "did:plc:group123",
     "memberDid": "did:plc:targetmember",
     "role": "admin"
   }'
@@ -649,10 +706,13 @@ Query the group's audit log.
 
 **Required role:** admin
 
+The target group is named by the `repo` querystring parameter (`?repo=<handle-or-did>`), with JWT `aud` = service DID. The legacy `aud` = group DID form (no `repo`) still works but is deprecated; see [Targeting a group](#targeting-a-group).
+
 **Query parameters:**
 
 | Parameter    | Type   | Default | Description                                          |
 | ------------ | ------ | ------- | ---------------------------------------------------- |
+| `repo`       | string | —       | Target group (handle or DID); see above              |
 | `limit`      | number | 50      | Results per page (1-100)                             |
 | `cursor`     | string | —       | Pagination cursor from a previous response           |
 | `actorDid`   | string | —       | Filter by actor DID                                  |
@@ -721,14 +781,14 @@ Every audited operation produces one of the following `action` strings. Denied o
 
 ```bash
 # All audit entries
-curl "https://group-service.example.com/xrpc/app.certified.group.audit.query" \
+curl "https://group-service.example.com/xrpc/app.certified.group.audit.query?repo=did:plc:group123" \
   -H "Authorization: Bearer $JWT"
 
 # Filter by actor
-curl "https://group-service.example.com/xrpc/app.certified.group.audit.query?actorDid=did:plc:member1" \
+curl "https://group-service.example.com/xrpc/app.certified.group.audit.query?repo=did:plc:group123&actorDid=did:plc:member1" \
   -H "Authorization: Bearer $JWT"
 
 # Filter by action
-curl "https://group-service.example.com/xrpc/app.certified.group.audit.query?action=member.add" \
+curl "https://group-service.example.com/xrpc/app.certified.group.audit.query?repo=did:plc:group123&action=member.add" \
   -H "Authorization: Bearer $JWT"
 ```

@@ -1,7 +1,10 @@
 /**
  * Steps for records.feature — the proxied repo surface (createRecord,
- * putRecord, uploadBlob, deleteRecord). All group-scoped (aud = group DID),
- * owner-signed here. Each mints a fresh JWT for its NSID.
+ * putRecord, uploadBlob, deleteRecord). Owner-signed; each mints a fresh JWT
+ * for its NSID. These use the LEGACY targeting form (aud = the group DID, no
+ * `repo`), so they double as backwards-compatibility coverage that the
+ * deprecated path still works. The new form (aud = service DID + explicit
+ * `repo`) is covered in aud-targeting.feature.
  */
 import { When, Then, Given } from '@cucumber/cucumber'
 import { strict as assert } from 'node:assert'

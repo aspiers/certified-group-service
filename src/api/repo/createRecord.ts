@@ -5,15 +5,15 @@ import {
   jsonResponse,
   assertCanWithAudit,
   proxyToPds,
+  resolveGroupDid,
   type AuthedMethodConfig,
 } from '../util.js'
-import { ForbiddenError } from '../../errors.js'
 import type { Operation } from '../../rbac/permissions.js'
 
 export default function (server: Server, ctx: AppContext) {
   const config: AuthedMethodConfig = {
     handler: async ({ auth, input: xrpcInput }) => {
-      const { callerDid, groupDid } = auth.credentials
+      const { callerDid } = auth.credentials
       const input = xrpcInput?.body as {
         repo: string
         collection: string
@@ -21,21 +21,21 @@ export default function (server: Server, ctx: AppContext) {
         record: { [x: string]: unknown }
       }
 
-      // 1. Validate repo field matches groupDid (prevent cross-repo writes)
-      if (input.repo !== groupDid) {
-        throw new ForbiddenError('repo field must match the group DID')
-      }
+      // The target group is named by the body `repo` (handle or DID, new path)
+      // or, for a legacy caller, carried in the credential from `aud`.
+      const groupDid = await resolveGroupDid(ctx, auth.credentials, input.repo)
 
-      // 2. RBAC check with audit on denial
+      // RBAC check with audit on denial
       const groupDb = ctx.groupDbs.get(groupDid)
       const operation: Operation = 'createRecord'
       await assertCanWithAudit(ctx, groupDb, callerDid, operation, {
         collection: input.collection,
       })
 
-      // 3. Forward to group's PDS via withAgent
+      // Forward to group's PDS via withAgent. Send the resolved group DID as
+      // `repo` — the caller may have supplied a handle, which the PDS won't take.
       const response = await proxyToPds(ctx.pdsAgents, groupDid, (agent) =>
-        agent.com.atproto.repo.createRecord(input),
+        agent.com.atproto.repo.createRecord({ ...input, repo: groupDid }),
       )
 
       // 4. Track authorship + audit log (independent, run in parallel)

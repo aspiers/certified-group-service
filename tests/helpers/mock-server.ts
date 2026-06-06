@@ -198,20 +198,76 @@ export function createTestApp(
   return app
 }
 
+/**
+ * Mock AuthVerifier mirroring the real surface after the #27 fix.
+ *
+ * By default it simulates the **legacy** path (group taken from `aud`, so
+ * `groupDid` is set on the credential and `legacyAud` is true) — matching the
+ * existing tests, which mint `aud = the group DID`. Tests exercising the new
+ * path override `verify`/`xrpcAuth` to return `groupDid: undefined` (procedures
+ * resolve from the body) or `legacyAud: false`.
+ *
+ * `resolveRepoToGroup` accepts only the configured group (`aud`): the group DID
+ * itself, or the handle `group.example.com`. Any other value throws, mirroring
+ * the real verifier rejecting an unregistered group — so a handler resolving
+ * `input.body.repo` exercises the same accept/reject behaviour without a real
+ * groups table.
+ */
 export function mockAuth(iss: string, aud: string = 'did:plc:testgroup') {
   return {
-    verify: async () => ({ iss, aud }),
+    verify: async () => ({ iss, groupDid: aud, legacyAud: true }),
     verifyServiceAuth: async () => ({ iss }),
+    resolveRepoToGroup: async (repo: string) => {
+      if (repo === aud || repo === 'group.example.com') return aud
+      const { AuthRequiredError } = await import('@atproto/xrpc-server')
+      throw new AuthRequiredError('Unknown group')
+    },
     xrpcAuth() {
       return async ({ req }: { req: any }) => {
-        const { iss, aud } = await this.verify(req)
-        return { credentials: { callerDid: iss, groupDid: aud } }
+        const { iss, groupDid, legacyAud } = await this.verify(req)
+        return { credentials: { callerDid: iss, groupDid, legacyAud } }
       }
     },
     xrpcServiceAuth() {
       return async ({ req }: { req: any }) => {
         const { iss } = await this.verifyServiceAuth(req)
         return { credentials: { callerDid: iss } }
+      }
+    },
+  } as any
+}
+
+/**
+ * Mock AuthVerifier simulating the **new** (#27-fixed) path: `aud` is the
+ * service DID and the group is named by an explicit `repo`. For queries the
+ * group is read from `req.query.repo` (resolved here); for body-input
+ * procedures it is left undefined so the handler resolves `input.body.repo`.
+ * `legacyAud` is always false, so no deprecation signal fires.
+ */
+export function mockAuthNewPath(iss: string, group: string = 'did:plc:testgroup') {
+  const resolveRepoToGroup = async (repo: string) => {
+    if (repo === group || repo === 'group.example.com') return group
+    const { AuthRequiredError } = await import('@atproto/xrpc-server')
+    throw new AuthRequiredError('Unknown group')
+  }
+  return {
+    verify: async (req: any) => {
+      const repo = typeof req?.query?.repo === 'string' ? req.query.repo : undefined
+      const groupDid = repo !== undefined ? await resolveRepoToGroup(repo) : undefined
+      return { iss, groupDid, legacyAud: false }
+    },
+    verifyServiceAuth: async () => ({ iss }),
+    resolveRepoToGroup,
+    xrpcAuth() {
+      return async ({ req }: { req: any }) => {
+        const { iss: callerDid, groupDid, legacyAud } = await this.verify(req)
+        return { credentials: { callerDid, groupDid, legacyAud } }
+      }
+    },
+    xrpcServiceAuth() {
+      return async ({ req }: { req: any }) => {
+        const { iss: callerDid } = await this.verifyServiceAuth(req)
+        return { credentials: { callerDid } }
       }
     },
   } as any

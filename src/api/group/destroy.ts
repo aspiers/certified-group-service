@@ -11,13 +11,11 @@ import { registerAuthedMethod, jsonResponse, assertCanWithAudit } from '../util.
  * PDS account is deliberately left untouched — the service only forgets the
  * group, so the same account can be re-imported later. Requires the owner role.
  *
- * Auth is group-scoped (aud = groupDid): the group still exists at call time,
- * so the normal per-group verifier applies and RBAC gates on the owner role.
- *
- * NOTE (#27): reading the group from the JWT `aud` is the legacy overload to be
- * deprecated. destroy has no request-level group field today, so the #27 fix
- * must add one (e.g. a `groupDid` input) and switch `aud` back to the service
- * DID. See docs/design/api-keys.md (the `aud` overload section).
+ * Auth is group-scoped: destroy has no request body, so the target group is
+ * named by the `repo` querystring (handle or DID) with `aud` = the service DID
+ * (the #27 fix), or, for a legacy caller, taken from the JWT `aud` overload —
+ * either way the verifier resolves it onto the credential. The group still
+ * exists at call time, so the per-group RBAC check gates on the owner role.
  *
  * Operation ordering is safety-driven. The global-DB deletes (member index,
  * groups row) run in a single transaction so they can't half-apply, and the
@@ -30,10 +28,14 @@ export default function (server: Server, ctx: AppContext) {
   registerAuthedMethod(server, 'app.certified.group.destroy', ctx, {
     handler: async ({ auth }) => {
       const { callerDid, groupDid } = auth.credentials
+      // The group is named by the `repo` querystring (resolved by the verifier)
+      // or the legacy `aud` overload.
+      if (!groupDid) {
+        throw new XRPCError(400, 'Missing repo', 'InvalidRequest')
+      }
 
-      // The group must be registered. The verifier already resolved groupDid
-      // from the JWT aud, but confirm a row exists so a stale/duplicate call
-      // returns a clean 404 rather than silently no-op'ing.
+      // The group must be registered. Confirm a row exists so a stale/duplicate
+      // call returns a clean 404 rather than silently no-op'ing.
       const group = await ctx.globalDb
         .selectFrom('groups')
         .select('did')

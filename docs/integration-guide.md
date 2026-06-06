@@ -185,18 +185,44 @@ const groupAgent = createGroupAgent(agent, groupDid)
 > to manage sessions and create agents. See the [demo app's proxy-agent.ts](../demo/server/oauth/proxy-agent.ts)
 > for a complete implementation that restores an OAuth session and creates a proxied agent.
 
+> **Heads up — this proxy agent is on the legacy `aud` path (#27).** Because
+> `withProxy('certified_group', groupDid)` routes through the group's DID document,
+> the PDS mints the service-auth JWT with `aud` = the **group DID**. That is the
+> deprecated targeting form: it still works, but every response now carries an RFC
+> 8594 `Deprecation: true` header. The supported form names the group with an
+> explicit `repo` field and sets `aud` to the **service DID**. The examples in Step 3
+> below add `repo` (which alone silences the deprecation warning); see
+> [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27)
+> for the full picture.
+
 ## Step 3: Make authenticated requests
 
 With a `groupAgent` configured, call group service endpoints. Use the custom `app.certified.group.repo.*` NSIDs for record operations (the PDS needs these to route correctly), and the `app.certified.group.*` NSIDs for member/role/audit operations.
 
-> **Forward-looking note (#27):** for per-group methods, the group service currently identifies the target group from the JWT `aud` claim (which the proxy agent sets to the group DID). That overload of `aud` is being deprecated — a future release will read the group from an explicit request field (the `repo` field, or a new explicit field for methods that lack one) and expect `aud` to be the group service's own DID. The contract described in this section is the current, supported one; see `docs/design/api-keys.md` for the planned change and migration window.
+Every group-scoped method names its target group with an explicit **`repo`**
+field — an `at-identifier` (a handle **or** a DID). For JSON-body procedures
+(`createRecord`, `putRecord`, `deleteRecord`, `member.add`, `member.remove`,
+`role.set`) `repo` goes in the **body**; for query methods (`member.list`,
+`audit.query`) and the raw/body-less methods (`repo.uploadBlob`, `group.destroy`)
+it goes in the **querystring** (`?repo=<handle-or-did>`). This is exactly what a
+stock `@atproto/api` typed call already emits, so passing `repo` is all the new
+path requires.
+
+> **Targeting a group (#27 shipped):** the group is identified by the `repo`
+> field above, and the JWT `aud` is the **service DID**. The older form — group
+> taken from the JWT `aud` with no `repo` — is **deprecated but still accepted**;
+> the proxy agent from Step 2 lands you on it (it mints `aud` = the group DID).
+> Adding `repo` activates the supported path and silences the deprecation warning.
+> See [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27)
+> and `docs/design/aud-deprecation.md`.
 
 ```typescript
 // Add a member (returns { memberDid, role, addedBy, addedAt })
+// repo names the target group, in the body for this JSON procedure.
 const { data: member } = await groupAgent.call(
   'app.certified.group.member.add',
   {},
-  { memberDid: 'did:plc:newmember', role: 'member' },
+  { repo: groupDid, memberDid: 'did:plc:newmember', role: 'member' },
   { encoding: 'application/json' },
 )
 
@@ -218,7 +244,10 @@ const { data: post } = await groupAgent.call(
 // post.uri → "at://did:plc:abc123/app.bsky.feed.post/3xyz789"
 ```
 
-**Important:** The `repo` field in all record operations must match the DID of the group the request is scoped to; the group service rejects a mismatch. (Today the group is named by the JWT `aud`, so in practice `repo` must equal `aud` — but see the note below: that coupling is changing under #27.)
+**Important:** The `repo` field **is** the group selector — the service resolves
+it to a DID and routes the request to that group. A `repo` that names no
+registered group is rejected with `401 Unknown group`. (`repo` accepts a handle
+or a DID; `groupDid` above is a DID, but the group's handle works too.)
 
 ## Putting it all together
 
@@ -241,7 +270,7 @@ const groupAgent = createGroupAgent(agent, groupDid)
 await groupAgent.call(
   'app.certified.group.member.add',
   {},
-  { memberDid: 'did:plc:newmember', role: 'member' },
+  { repo: groupDid, memberDid: 'did:plc:newmember', role: 'member' },
   { encoding: 'application/json' },
 )
 
@@ -265,13 +294,15 @@ const { data: post } = await groupAgent.call(
 
 ## Uploading blobs
 
-Use the custom `app.certified.group.repo.uploadBlob` NSID:
+Use the custom `app.certified.group.repo.uploadBlob` NSID. The request body is the
+raw blob bytes, so the target group is named by `repo` in the **querystring** (the
+first argument to `.call`) rather than the body:
 
 ```typescript
-// Upload a blob (max 5 MB)
+// Upload a blob (max 5 MB) — repo in the querystring, body is the raw bytes
 const {
   data: { blob },
-} = await groupAgent.call('app.certified.group.repo.uploadBlob', {}, imageBuffer, {
+} = await groupAgent.call('app.certified.group.repo.uploadBlob', { repo: groupDid }, imageBuffer, {
   encoding: 'image/png',
 })
 
@@ -324,7 +355,7 @@ These are standard AT Protocol read operations — no authentication is required
 
 ## Writing records
 
-All write operations go through the group service, which enforces RBAC and logs to the audit trail. The `repo` field must always match the group DID.
+All write operations go through the group service, which enforces RBAC and logs to the audit trail. Each write carries a `repo` field (in the request body) naming the target group — a handle or DID, resolved to the group DID server-side; a `repo` that names no registered group is rejected with `401 Unknown group`.
 
 ### createRecord
 
@@ -384,13 +415,15 @@ await groupAgent.call(
 
 ## Managing members and roles
 
-The group DID is **not** passed as a parameter — it's inferred from the JWT's `aud` claim, which the proxy agent sets automatically.
+The target group is named by the `repo` field. `member.list` is a query, so
+`repo` goes in the **querystring** (the first argument to `.call`); the
+`member.add` / `member.remove` / `role.set` procedures take it in the **body**.
 
 ```typescript
-// List members (any member can do this)
+// List members (any member can do this) — repo in the querystring
 const {
   data: { members, cursor },
-} = await groupAgent.call('app.certified.group.member.list', { limit: 50 })
+} = await groupAgent.call('app.certified.group.member.list', { repo: groupDid, limit: 50 })
 // members: [{ did, role, addedBy, addedAt }, ...]
 
 // Add a member (requires admin)
@@ -398,7 +431,7 @@ const {
 await groupAgent.call(
   'app.certified.group.member.add',
   {},
-  { memberDid: 'did:plc:newmember', role: 'member' },
+  { repo: groupDid, memberDid: 'did:plc:newmember', role: 'member' },
   { encoding: 'application/json' },
 )
 
@@ -406,7 +439,7 @@ await groupAgent.call(
 await groupAgent.call(
   'app.certified.group.member.remove',
   {},
-  { memberDid: 'did:plc:targetmember' },
+  { repo: groupDid, memberDid: 'did:plc:targetmember' },
   { encoding: 'application/json' },
 )
 
@@ -415,25 +448,28 @@ await groupAgent.call(
 await groupAgent.call(
   'app.certified.group.role.set',
   {},
-  { memberDid: 'did:plc:trustedmember', role: 'admin' },
+  { repo: groupDid, memberDid: 'did:plc:trustedmember', role: 'admin' },
   { encoding: 'application/json' },
 )
 ```
 
 ## Querying the audit log
 
-Every action (permitted or denied) is logged. Admins and owners can query the audit log for their group.
+Every action (permitted or denied) is logged. Admins and owners can query the
+audit log for their group. `audit.query` is a query method, so `repo` (the
+target group) goes in the querystring alongside any filters.
 
 ```typescript
 // All recent entries
 const {
   data: { entries },
-} = await groupAgent.call('app.certified.group.audit.query', {})
+} = await groupAgent.call('app.certified.group.audit.query', { repo: groupDid })
 
 // Filter by actor
 const {
   data: { entries: userEntries },
 } = await groupAgent.call('app.certified.group.audit.query', {
+  repo: groupDid,
   actorDid: 'did:plc:specificuser',
 })
 
@@ -441,6 +477,7 @@ const {
 const {
   data: { entries: deletions },
 } = await groupAgent.call('app.certified.group.audit.query', {
+  repo: groupDid,
   action: 'deleteOwnRecord',
 })
 
@@ -448,6 +485,7 @@ const {
 const {
   data: { entries: postEntries },
 } = await groupAgent.call('app.certified.group.audit.query', {
+  repo: groupDid,
   collection: 'app.bsky.feed.post',
 })
 ```
@@ -469,12 +507,14 @@ For the full list of `action` values and what each `detail` object contains, see
 
 ## Removing a group
 
-The owner can remove a group from the service with `app.certified.group.destroy`. Like the other per-group operations it is group-scoped, so the group DID is inferred from the JWT's `aud` claim and there is **no request body**.
+The owner can remove a group from the service with `app.certified.group.destroy`.
+It has **no request body**, so — like `uploadBlob` — the target group is named by
+`repo` in the **querystring**.
 
 ```typescript
-// Destroy the group (requires owner)
+// Destroy the group (requires owner) — repo in the querystring
 // Returns: { groupDid }
-await groupAgent.call('app.certified.group.destroy')
+await groupAgent.call('app.certified.group.destroy', { repo: groupDid })
 ```
 
 This is the service-level inverse of `register` / `import`: it drops the group's stored credentials, its membership, and its per-group data from the service. It deliberately does **not** touch the underlying PDS account — the DID, handle, and repo continue to exist, so the same account can be re-imported later with `app.certified.group.import`. Destroy is therefore _not_ account deletion; if you also want to tear down the account, do that separately against its PDS.
@@ -521,7 +561,7 @@ All error responses follow this shape:
 
 ## Role quick reference
 
-Roles are **per-group**, not global. A user can be an owner of one group, a member of another, and not part of a third. Every permission check is scoped to a single group based on the JWT's `aud` claim.
+Roles are **per-group**, not global. A user can be an owner of one group, a member of another, and not part of a third. Every permission check is scoped to a single group — the one named by the request's `repo` field (legacy callers still name it via the JWT's `aud` claim; see [#27 migration](#migrating-from-the-legacy-aud-form-27)).
 
 | Role       | Can do (within that group)                                                                                   |
 | ---------- | ------------------------------------------------------------------------------------------------------------ |
@@ -558,5 +598,83 @@ and making requests with `Authorization: Bearer <jwt>`. Use the custom
 `app.certified.group.repo.*` NSIDs — the `lxm` field in the JWT must match the NSID
 you're calling.
 
+Mint the JWT with `aud` = the **service DID** (its standard RFC 7519 meaning), and
+name the target group with `repo` — in the body for JSON procedures, in the
+querystring for queries / raw-body methods:
+
+```typescript
+// Mint a service-auth JWT for a group-scoped call.
+// aud = the SERVICE DID (not the group DID); lxm = the NSID being called.
+const {
+  data: { token },
+} = await agent.com.atproto.server.getServiceAuth({
+  aud: GROUP_SERVICE_DID,
+  lxm: 'app.certified.group.repo.createRecord',
+})
+
+// Procedure: repo travels in the body.
+const res = await fetch(`${GROUP_SERVICE}/xrpc/app.certified.group.repo.createRecord`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    repo: groupDid, // the group selector (a handle or DID)
+    collection: 'app.bsky.feed.post',
+    record: {
+      $type: 'app.bsky.feed.post',
+      text: 'First post from the group!',
+      createdAt: new Date().toISOString(),
+    },
+  }),
+})
+
+// Query / raw-body method: repo travels in the querystring, e.g.
+//   GET /xrpc/app.certified.group.member.list?repo=<handle-or-did>&limit=50
+```
+
 Service proxying is preferred because it's simpler, more secure (the BFF never touches
 service auth JWTs), and follows the standard atproto pattern.
+
+## Migrating from the legacy `aud` form (#27)
+
+Earlier the group service read the target group from the JWT `aud` claim — a misuse
+of `aud`, whose RFC 7519 meaning is the **service** receiving the token, not the
+resource acted on. That overload is now **deprecated** ([#27](https://github.com/hypercerts-org/certified-group-service/issues/27)).
+Both forms are accepted today:
+
+- **Supported:** name the group with an explicit **`repo`** field and set the JWT
+  `aud` to the **service DID**.
+- **Legacy (deprecated):** set `aud` to the **group DID** and send no `repo`.
+
+**How to tell you're still on the legacy path.** Every response served via the legacy
+path carries [RFC 8594](https://www.rfc-editor.org/rfc/rfc8594) deprecation headers:
+
+```text
+Deprecation: true
+Link: <https://github.com/hypercerts-org/certified-group-service/issues/27>; rel="deprecation"
+```
+
+There is no `Sunset` header yet — a removal date is undecided. Watch for `Deprecation:
+true` on your responses to find un-migrated calls.
+
+**The two independent migration steps.** Precedence is decided by the presence of
+`repo`: send it and the supported path is used regardless of `aud`. So you can migrate
+in either order, or both at once:
+
+1. **Add `repo`** to each group-scoped call (body for procedures, querystring for
+   queries / raw-body methods, per the tables above). This alone silences the
+   deprecation signal.
+2. **Switch the minted `aud`** from the group DID to the service DID. With `repo`
+   present, `aud` **must** be the service DID or the request is rejected with
+   `jwt audience does not match service did`.
+
+Under service proxying, step 2 is governed by how the PDS mints the JWT for the
+proxy target, so the proxy agent in Step 2 is on the legacy path until that
+mechanism sets `aud` to the service DID; adding `repo` (step 1) still moves you off
+the deprecated targeting today. The direct-call form above is already fully migrated.
+
+The legacy form keeps working for now and will be removed in a later release once
+clients have migrated. See `docs/design/aud-deprecation.md` for the full design and
+rationale.
