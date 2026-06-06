@@ -548,21 +548,26 @@ registered via `registerAuthedMethod` in `src/api/index.ts`.
   request, but the legacy JWT path still accepts `aud=groupDid`. During the
   deprecation window both must coexist; confirm the key path can rely on the new
   field being present before #27's hard cutover.
-- **Service-DID format for `rpc:` scope `aud` (NEW — found at dep-add).**
+- **Service-DID format for `rpc:` scope `aud` (RESOLVED).**
   `@atproto/oauth-scopes` validates the `aud` in an `rpc:` scope with
   `isAtprotoDidRefAbsolute`, which **requires a `did:web:host#fragment`
   service ref** — it rejects a bare `did:web:host` and rejects `did:plc:*`
   entirely. But CGS's `config.serviceDid` is a **bare** `did:web:${hostname}`
-  (`src/config.ts`). So `RpcPermission.scopeNeededFor({ aud: config.serviceDid })`
-  would build an invalid scope and `matches` would always fail. Options for the
-  `gate`/scope work: (a) append a fixed service-id fragment (e.g.
-  `${serviceDid}#cgs`) when constructing/validating scopes; (b) store scopes
-  with `aud=*` and rely on `lxm` matching only; (c) don't put the real service
-  DID in the scope at all and define our own constant ref. Leaning (a) — a
-  single `SERVICE_SCOPE_AUD = \`${serviceDid}#cgs\`` constant used both when
-  minting (`keys.create`) and checking (`gate`), so it stays internally
-  consistent regardless of the bare-DID config value. Tracked on the `gate`
-  bead.
+  (`src/config.ts`). **Decision:** define one constant
+  `SERVICE_SCOPE_AUD = \`${config.serviceDid}#certified_group_service\`` used
+  for **both** minting (`keys.create` →
+  `RpcPermission.scopeNeededFor({ aud: SERVICE_SCOPE_AUD })`) and checking
+  (`gate` → `ScopesSet.matches('rpc', { lxm, aud: SERVICE_SCOPE_AUD })`), so it
+  stays internally consistent regardless of the bare-DID config value.
+  - This scope-layer `aud` is **independent** of the JWT-auth `aud`. The
+    JWT-auth check **must stay bare-DID-tolerant**: the reference PDS **strips
+    the service fragment** from a proxied JWT's `aud` until Spring 2026
+    (atproto.com/specs/xrpc#service-proxying), so requiring a fragment in the
+    verifier would break proxied callers. Two `aud` concepts, two rules.
+  - The `#certified_group_service` fragment is only **externally resolvable**
+    once CGS publishes a DID document with a matching `service` entry — CGS
+    serves none today (404). Tracked separately (DID-doc bead). Until then the
+    constant is internally consistent but not third-party-verifiable.
 
 ## Future extensions
 
