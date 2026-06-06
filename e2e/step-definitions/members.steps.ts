@@ -1,12 +1,14 @@
 /**
- * Steps for membership.feature (RBAC) and reporting.feature. Most methods here
- * are group-scoped (aud = the group DID): member.*, role.set, audit.query,
- * repo.createRecord. The exception is groups.membership.list, which is
- * SERVICE-level (aud = the service DID) — it lists the caller's memberships
- * across groups. (CGS already mixes service- and group-scoped aud today; #27
- * tracks making that consistent.) The caller varies by role — owner, admin,
- * member, or outsider — and each signs its own JWT, so the negative cases
- * exercise real authorization (Forbidden, 403), not a simulated denial.
+ * Steps for membership.feature (RBAC) and reporting.feature. The group-scoped
+ * methods here (member.*, role.set, audit.query, repo.createRecord) use the
+ * LEGACY targeting form (aud = the group DID, no `repo`) — kept deliberately so
+ * these scenarios double as backwards-compatibility coverage that the
+ * deprecated path still works (#27). The new form (aud = service DID + explicit
+ * `repo`) is covered in aud-targeting.feature. groups.membership.list is
+ * SERVICE-level (aud = the service DID) and lists the caller's memberships
+ * across groups. The caller varies by role — owner, admin, member, or outsider
+ * — and each signs its own JWT, so the negative cases exercise real
+ * authorization (Forbidden, 403), not a simulated denial.
  */
 import { Given, When, Then } from '@cucumber/cucumber'
 import { strict as assert } from 'node:assert'

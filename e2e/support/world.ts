@@ -13,6 +13,7 @@ export class CgsWorld extends World implements HttpSink {
   lastHttpStatus?: number
   lastHttpJson?: Record<string, unknown>
   lastHttpBody?: string
+  lastHttpHeaders?: Headers
 
   // --- resolved identity state (deterministic; re-derived in each Background) ---
   serviceDid: string = testEnv.serviceDid

@@ -115,8 +115,7 @@ export async function proxyToPds<T>(
  * Link to the deprecation explanation, surfaced in the RFC 8594 `Link` header
  * on legacy-`aud` responses.
  */
-const DEPRECATION_INFO_URL =
-  'https://github.com/hypercerts-org/certified-group-service/issues/27'
+const DEPRECATION_INFO_URL = 'https://github.com/hypercerts-org/certified-group-service/issues/27'
 
 /** One warn per caller-DID per this window, to keep legacy traffic from flooding logs. */
 const LEGACY_WARN_WINDOW_MS = 15 * 60 * 1000
