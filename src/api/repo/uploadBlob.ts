@@ -31,7 +31,7 @@ export default function (server: Server, ctx: AppContext) {
       }
       const groupDb = ctx.groupDbs.get(groupDid)
 
-      await assertCanWithAudit(ctx, groupDb, callerDid, 'uploadBlob')
+      await assertCanWithAudit(ctx, groupDb, callerDid, 'uploadBlob', undefined, auth.credentials)
 
       // input.body is a Readable stream (framework applied no body parser for */* encoding)
       // input.encoding is the Content-Type header
