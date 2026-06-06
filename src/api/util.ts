@@ -119,6 +119,8 @@ const DEPRECATION_INFO_URL = 'https://github.com/hypercerts-org/certified-group-
 
 /** One warn per caller-DID per this window, to keep legacy traffic from flooding logs. */
 const LEGACY_WARN_WINDOW_MS = 15 * 60 * 1000
+/** Cap on distinct callers tracked; above this we sweep expired entries first. */
+const LEGACY_WARN_MAX_ENTRIES = 10_000
 const lastLegacyWarn = new Map<string, number>()
 
 /**
@@ -134,6 +136,14 @@ function signalLegacyAud(ctx: AppContext, res: ExpressResponse, callerDid: strin
   const now = Date.now()
   const previous = lastLegacyWarn.get(callerDid)
   if (previous === undefined || now - previous >= LEGACY_WARN_WINDOW_MS) {
+    // Bound the map: an entry older than the window is useless (it would warn
+    // again anyway), so sweep expired entries before growing past the cap. This
+    // keeps memory proportional to distinct callers seen within one window.
+    if (lastLegacyWarn.size >= LEGACY_WARN_MAX_ENTRIES) {
+      for (const [did, ts] of lastLegacyWarn) {
+        if (now - ts >= LEGACY_WARN_WINDOW_MS) lastLegacyWarn.delete(did)
+      }
+    }
     lastLegacyWarn.set(callerDid, now)
     ctx.logger.warn(
       { callerDid, nsid },

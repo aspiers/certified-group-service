@@ -651,7 +651,7 @@ Both forms are accepted today:
 **How to tell you're still on the legacy path.** Every response served via the legacy
 path carries [RFC 8594](https://www.rfc-editor.org/rfc/rfc8594) deprecation headers:
 
-```
+```text
 Deprecation: true
 Link: <https://github.com/hypercerts-org/certified-group-service/issues/27>; rel="deprecation"
 ```

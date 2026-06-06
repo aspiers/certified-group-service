@@ -21,9 +21,14 @@ export interface GroupAuthCredentials {
   groupDid?: string
   /**
    * True when the group was taken from the JWT `aud` claim (the deprecated
-   * overload) rather than an explicit `repo` field. Drives the deprecation
-   * signal. Always false on the procedure path, where the handler resolves the
-   * group from the body.
+   * overload) rather than an explicit `repo`. Drives the deprecation signal.
+   *
+   * Determined entirely by the verifier, which only sees the querystring (it
+   * runs before the body is parsed). So it is true whenever there is no
+   * querystring `repo` and `aud` is a group DID — INCLUDING body-input
+   * procedures: a legacy procedure call (body `repo` + `aud=<groupDid>`) is
+   * still flagged legacy here, because the body `repo` is invisible at auth
+   * time. A request only escapes the legacy flag by sending `aud=serviceDid`.
    */
   legacyAud: boolean
 }

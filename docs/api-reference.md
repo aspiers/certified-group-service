@@ -8,7 +8,7 @@ All endpoints (except `/health`) require authentication via a signed JWT in the 
 - `jti` — a unique nonce (each token can only be used once)
 - `exp` — expiration timestamp
 
-### Targeting a group
+## Targeting a group
 
 Group-scoped methods name their target group with an explicit `repo` field — an `at-identifier` (a handle **or** a DID), resolved to the group DID server-side. The JWT `aud` is the service DID. Where `repo` goes depends on the method kind:
 
@@ -19,13 +19,20 @@ Group-scoped methods name their target group with an explicit `repo` field — a
 
 Cross-group endpoints under `app.certified.groups.*` and the group-lifecycle methods `register` / `import` target the service itself (`aud` = service DID) and take no `repo`.
 
-### Legacy `aud` = group DID form (deprecated)
+## Legacy `aud` = group DID form (deprecated)
 
-A transitional form remains accepted during the migration window: set the JWT `aud` to the **group DID** and omit `repo`. This is **deprecated** (issue [#27](https://github.com/hypercerts-org/certified-group-service/issues/27)) and will be removed in a later release once clients migrate. To migrate, simply set `aud` to the service DID and add the `repo` field — when `repo` is present the new path is always used, and the request is rejected with `jwt audience does not match service did` unless `aud` is the service DID.
+A transitional form remains accepted during the migration window: set the JWT `aud` to the **group DID** (omitting `repo`). This is **deprecated** (issue [#27](https://github.com/hypercerts-org/certified-group-service/issues/27)) and will be removed in a later release once clients migrate.
+
+The deprecation is keyed off `aud`, because the service determines it at the auth layer — which sees the querystring but **not** the request body (auth runs before body parsing). Concretely:
+
+- **Query methods** (and `uploadBlob` / `destroy`, which carry `repo` on the querystring): adding `?repo=` moves you onto the new path immediately. With `repo` present, `aud` **must** be the service DID, or the request is rejected with `jwt audience does not match service did`.
+- **JSON-body procedures** (`createRecord`, `member.add`, …): a request is treated as legacy whenever `aud` is a group DID, **even if `repo` is in the body** — the body is invisible at auth time, so it cannot suppress the deprecation signal. To fully migrate such a call, set `aud` to the service DID (the body `repo` is then the group selector).
+
+In all cases, the way off the deprecated path is to set `aud` to the service DID.
 
 Responses served via the legacy path carry RFC 8594 deprecation headers:
 
-```
+```text
 Deprecation: true
 Link: <https://github.com/hypercerts-org/certified-group-service/issues/27>; rel="deprecation"
 ```

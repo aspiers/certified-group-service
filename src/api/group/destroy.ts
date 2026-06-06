@@ -11,10 +11,11 @@ import { registerAuthedMethod, jsonResponse, assertCanWithAudit } from '../util.
  * PDS account is deliberately left untouched — the service only forgets the
  * group, so the same account can be re-imported later. Requires the owner role.
  *
- * Auth is group-scoped: the target group is named by the `repo` body field
- * (handle or DID) with `aud` = the service DID (the #27 fix), or, for a legacy
- * caller, taken from the JWT `aud` overload. The group still exists at call
- * time, so the per-group RBAC check gates on the owner role either way.
+ * Auth is group-scoped: destroy has no request body, so the target group is
+ * named by the `repo` querystring (handle or DID) with `aud` = the service DID
+ * (the #27 fix), or, for a legacy caller, taken from the JWT `aud` overload —
+ * either way the verifier resolves it onto the credential. The group still
+ * exists at call time, so the per-group RBAC check gates on the owner role.
  *
  * Operation ordering is safety-driven. The global-DB deletes (member index,
  * groups row) run in a single transaction so they can't half-apply, and the
