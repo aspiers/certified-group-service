@@ -36,7 +36,11 @@ async function createKey(world: CgsWorld): Promise<void> {
     cgsUrl: world.env.cgsUrl,
     nsid: KEYS_CREATE,
     token,
-    body: { repo: world.groupDid, name: 'platform backend e2e sync', scopes: [memberListScope(world)] },
+    body: {
+      repo: world.groupDid,
+      name: 'platform backend e2e sync',
+      scopes: [memberListScope(world)],
+    },
   })
   if (world.lastHttpStatus === 200 && world.lastHttpJson) {
     world.apiKey = world.lastHttpJson.key as string
@@ -56,7 +60,7 @@ Given('the owner has created an API key scoped to member.list', async function (
 
 Then('the response contains an API key and keyRef', function (this: CgsWorld) {
   assert.ok(this.apiKey, 'expected an API key in the response')
-  assert.match(this.apiKey!, /^cgsk_/, 'API key should have the cgsk_ prefix')
+  assert.match(this.apiKey, /^cgsk_/, 'API key should have the cgsk_ prefix')
   assert.ok(this.apiKeyRef, 'expected a keyRef in the response')
 })
 
@@ -65,7 +69,7 @@ When('a backend lists the group members using the API key', async function (this
   await callXrpcWithApiKey(this, {
     cgsUrl: this.env.cgsUrl,
     nsid: MEMBER_LIST,
-    apiKey: this.apiKey!,
+    apiKey: this.apiKey,
     method: 'GET',
     repo: this.groupDid,
   })
@@ -76,7 +80,7 @@ When('a backend queries the audit log using the API key', async function (this: 
   await callXrpcWithApiKey(this, {
     cgsUrl: this.env.cgsUrl,
     nsid: AUDIT_QUERY,
-    apiKey: this.apiKey!,
+    apiKey: this.apiKey,
     method: 'GET',
     repo: this.groupDid,
   })

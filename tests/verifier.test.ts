@@ -7,6 +7,7 @@ import type { GlobalDatabase } from '../src/db/schema.js'
 import { createTestGlobalDb } from './helpers/test-db.js'
 import { NonceCache, NONCE_TTL_SECONDS } from '../src/auth/nonce.js'
 import { AuthVerifier } from '../src/auth/verifier.js'
+import type { GroupAuthResult } from '../src/auth/verifier.js'
 import { GroupDbPool } from '../src/db/group-db-pool.js'
 import { generateApiKey } from '../src/auth/api-key.js'
 
@@ -430,10 +431,16 @@ describe('AuthVerifier', () => {
       )
     }
 
+    // xrpcAuth()'s MethodAuthVerifier return is a union (success | error
+    // shape); narrow it to the success result for assertions.
+    async function runAuth(req: unknown): Promise<GroupAuthResult> {
+      const auth = verifier.xrpcAuth()
+      return (await auth({ req } as never)) as GroupAuthResult
+    }
+
     it('authenticates a valid key and returns apiKey credentials with scopes', async () => {
       const key = await seedKey()
-      const auth = verifier.xrpcAuth()
-      const { credentials } = await auth({ req: apiKeyReq(key.plaintext) } as any)
+      const { credentials } = await runAuth(apiKeyReq(key.plaintext))
       expect(credentials).toMatchObject({
         callerDid: 'did:plc:owner', // issuing owner DID
         groupDid: GROUP,
@@ -500,10 +507,7 @@ describe('AuthVerifier', () => {
 
     it('falls through to the JWT path when no X-API-Key header is present', async () => {
       // Default fakeVerifyJwt mock resolves a legacy-aud JWT for the test group.
-      const auth = verifier.xrpcAuth()
-      const { credentials } = await auth({
-        req: makeReq({ authorization: 'Bearer jwt' }),
-      } as any)
+      const { credentials } = await runAuth(makeReq({ authorization: 'Bearer jwt' }))
       expect(credentials.authKind).toBe('jwt')
       expect(fakeVerifyJwt).toHaveBeenCalled()
     })
