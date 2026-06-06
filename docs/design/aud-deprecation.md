@@ -180,7 +180,7 @@ CGS's consumers are atproto app developers using standard SDKs (`@atproto/api`).
   understand CGS-specific semantics and rely on the group happening to equal the
   audience — fighting the SDK's model.
 - The **fixed** shape is what a stock SDK already emits: `getServiceAuth({ aud:
-  serviceDid, lxm })` plus `repo` in the standard place for each method
+serviceDid, lxm })` plus `repo` in the standard place for each method
   (`agent.com.atproto.repo.createRecord({ repo, … })`). No bespoke JWT, no
   SDK-bypassing fetch, no non-standard claims.
 
@@ -235,10 +235,11 @@ by server convenience. A stock SDK call is:
 
 ```ts
 const { token } = await agent.com.atproto.server.getServiceAuth({
-  aud: cgsServiceDid,                       // the SERVICE — the only thing aud can mean
+  aud: cgsServiceDid, // the SERVICE — the only thing aud can mean
   lxm: 'com.atproto.repo.createRecord',
 })
-await agent.com.atproto.repo.createRecord(  // repo in the BODY, via the typed call
+await agent.com.atproto.repo.createRecord(
+  // repo in the BODY, via the typed call
   { repo: groupDid, collection, record },
   { headers: { Authorization: `Bearer ${token}` } },
 )
@@ -258,11 +259,11 @@ Two facts follow, and they set the design:
 This forces a **split by method type** (which is exactly the atproto
 convention — body for procedures, querystring for queries):
 
-| method kind        | where `repo` is read        | who resolves the group |
-| ------------------ | --------------------------- | ---------------------- |
-| query (`member.list`, `audit.query`) | querystring (`params.repo`) | the **verifier** (it receives `params`) |
-| procedure (`createRecord`, `putRecord`, `deleteRecord`) | request **body** (`input.body.repo`) | the **handler** (the verifier cannot see the body) |
-| `uploadBlob`       | querystring (raw body, no JSON `repo` possible) | the **handler** |
+| method kind                                             | where `repo` is read                            | who resolves the group                             |
+| ------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------- |
+| query (`member.list`, `audit.query`)                    | querystring (`params.repo`)                     | the **verifier** (it receives `params`)            |
+| procedure (`createRecord`, `putRecord`, `deleteRecord`) | request **body** (`input.body.repo`)            | the **handler** (the verifier cannot see the body) |
+| `uploadBlob`                                            | querystring (raw body, no JSON `repo` possible) | the **handler**                                    |
 
 **Why the verifier can't do it uniformly.** In `@atproto/xrpc-server` the auth
 verifier runs **before** the body is parsed — it is handed `{ req, res, params }`
@@ -399,7 +400,7 @@ At that point set `Sunset` ahead of the removal release, then remove.
 ## Resolved during design
 
 - **Header injection mechanism** — settled. The verifier receives `{ req, res,
-  params }` and the handler context carries `res` (verified in
+params }` and the handler context carries `res` (verified in
   `@atproto/xrpc-server` `server.js`); a wrapper in `registerAuthedMethod` reads
   `credentials.legacyAud` and sets the headers. See _Header injection mechanism_
   above.

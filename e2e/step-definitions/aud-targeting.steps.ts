@@ -20,9 +20,11 @@ function ownerCreds(world: CgsWorld) {
   return { identifier: world.env.ownerIdentifier, password: world.env.ownerPassword }
 }
 
-function feedPostBody(world: CgsWorld, includeRepo: boolean) {
+// createRecord always carries `repo` in the body (the lexicon requires it). The
+// new vs legacy distinction for this procedure is purely the JWT `aud` value.
+function feedPostBody(world: CgsWorld) {
   return {
-    ...(includeRepo ? { repo: world.groupDid } : {}),
+    repo: world.groupDid,
     collection: FEED_POST,
     record: {
       $type: FEED_POST,
@@ -84,7 +86,7 @@ When(
       cgsUrl: this.env.cgsUrl,
       nsid: CREATE_RECORD,
       token,
-      body: feedPostBody(this, true), // repo in the body
+      body: feedPostBody(this), // repo in the body
     })
   },
 )
@@ -92,14 +94,18 @@ When(
 When('the owner creates a feed post with the legacy aud overload', async function (this: CgsWorld) {
   const token = await mintServiceAuth({
     ...ownerCreds(this),
-    aud: this.groupDid!,
+    aud: this.groupDid!, // legacy: aud overloaded as the group DID
     lxm: CREATE_RECORD,
   })
+  // createRecord requires `repo` in the body (lexicon), so a legacy caller still
+  // sends it — the legacy-ness is in the aud, not the absence of repo. The
+  // verifier flags the request legacy from the aud (it cannot see the body),
+  // which is what triggers the deprecation header.
   await callXrpc(this, {
     cgsUrl: this.env.cgsUrl,
     nsid: CREATE_RECORD,
     token,
-    body: feedPostBody(this, false), // no repo — group from aud
+    body: feedPostBody(this),
   })
 })
 
