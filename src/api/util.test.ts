@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { XRPCError as ClientXRPCError } from '@atproto/xrpc'
 import { XRPCError, UpstreamFailureError } from '@atproto/xrpc-server'
-import { proxyToPds } from './util.js'
+import { proxyToPds, rateLimitAllow } from './util.js'
 import type { PdsAgentPool } from '../pds/agent.js'
 
 function makePool(withAgentImpl: PdsAgentPool['withAgent']): PdsAgentPool {
@@ -103,5 +103,53 @@ describe('proxyToPds', () => {
     const err: any = await proxyToPds(pool, 'did:example:1', async () => 'ok').catch((e) => e)
     expect(err).toBeInstanceOf(UpstreamFailureError)
     expect(err.payload.message).toMatch(/Upstream PDS error: string error/)
+  })
+})
+
+describe('rateLimitAllow', () => {
+  const WINDOW = 1000
+  const CAP = 1000
+
+  it('allows the first time a key is seen and records it', () => {
+    const map = new Map<string, number>()
+    expect(rateLimitAllow(map, 'a', 0, WINDOW, CAP)).toBe(true)
+    expect(map.get('a')).toBe(0)
+  })
+
+  it('suppresses a repeat within the window', () => {
+    const map = new Map<string, number>([['a', 0]])
+    expect(rateLimitAllow(map, 'a', WINDOW - 1, WINDOW, CAP)).toBe(false)
+    // timestamp is unchanged when suppressed
+    expect(map.get('a')).toBe(0)
+  })
+
+  it('allows again once the window has elapsed and refreshes the timestamp', () => {
+    const map = new Map<string, number>([['a', 0]])
+    expect(rateLimitAllow(map, 'a', WINDOW, WINDOW, CAP)).toBe(true)
+    expect(map.get('a')).toBe(WINDOW)
+  })
+
+  it('sweeps expired entries before growing past the cap', () => {
+    // Two stale entries (older than the window) + one fresh, at the cap of 3.
+    const map = new Map<string, number>([
+      ['stale1', 0],
+      ['stale2', 0],
+      ['fresh', 5000],
+    ])
+    // now is well past the window for the stale pair but within it for `fresh`.
+    const allowed = rateLimitAllow(map, 'new', 5500, WINDOW, 3)
+    expect(allowed).toBe(true)
+    // The two expired entries were evicted; the fresh one and the new key remain.
+    expect(map.has('stale1')).toBe(false)
+    expect(map.has('stale2')).toBe(false)
+    expect(map.has('fresh')).toBe(true)
+    expect(map.get('new')).toBe(5500)
+  })
+
+  it('does not sweep below the cap', () => {
+    const map = new Map<string, number>([['old', 0]])
+    // Under the cap (1 < 3), so the expired entry is left in place, not swept.
+    rateLimitAllow(map, 'new', 5000, WINDOW, 3)
+    expect(map.has('old')).toBe(true)
   })
 })

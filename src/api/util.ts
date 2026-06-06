@@ -124,6 +124,31 @@ const LEGACY_WARN_MAX_ENTRIES = 10_000
 const lastLegacyWarn = new Map<string, number>()
 
 /**
+ * Per-key rate limiter backed by a bounded `Map<key, lastSeenMs>`. Returns true
+ * (and records `now`) when `key` has not been seen within `windowMs`; false
+ * otherwise. Before growing past `maxEntries` it sweeps entries older than the
+ * window — they're useless (they'd fire again anyway) — so the map stays
+ * proportional to distinct keys seen within one window rather than unbounded.
+ */
+export function rateLimitAllow(
+  map: Map<string, number>,
+  key: string,
+  now: number,
+  windowMs: number,
+  maxEntries: number,
+): boolean {
+  const previous = map.get(key)
+  if (previous !== undefined && now - previous < windowMs) return false
+  if (map.size >= maxEntries) {
+    for (const [k, ts] of map) {
+      if (now - ts >= windowMs) map.delete(k)
+    }
+  }
+  map.set(key, now)
+  return true
+}
+
+/**
  * Signal the deprecated `aud`-as-group path (issue #27) on a per-request basis:
  * attach RFC 8594 headers so clients can detect it programmatically, and emit a
  * rate-limited warn so operators can see lingering legacy traffic. No `Sunset`
@@ -133,18 +158,15 @@ function signalLegacyAud(ctx: AppContext, res: ExpressResponse, callerDid: strin
   res.setHeader('Deprecation', 'true')
   res.setHeader('Link', `<${DEPRECATION_INFO_URL}>; rel="deprecation"`)
 
-  const now = Date.now()
-  const previous = lastLegacyWarn.get(callerDid)
-  if (previous === undefined || now - previous >= LEGACY_WARN_WINDOW_MS) {
-    // Bound the map: an entry older than the window is useless (it would warn
-    // again anyway), so sweep expired entries before growing past the cap. This
-    // keeps memory proportional to distinct callers seen within one window.
-    if (lastLegacyWarn.size >= LEGACY_WARN_MAX_ENTRIES) {
-      for (const [did, ts] of lastLegacyWarn) {
-        if (now - ts >= LEGACY_WARN_WINDOW_MS) lastLegacyWarn.delete(did)
-      }
-    }
-    lastLegacyWarn.set(callerDid, now)
+  if (
+    rateLimitAllow(
+      lastLegacyWarn,
+      callerDid,
+      Date.now(),
+      LEGACY_WARN_WINDOW_MS,
+      LEGACY_WARN_MAX_ENTRIES,
+    )
+  ) {
     ctx.logger.warn(
       { callerDid, nsid },
       'Deprecated auth: group taken from JWT aud. Pass an explicit `repo` and set aud to the service DID (issue #27).',
