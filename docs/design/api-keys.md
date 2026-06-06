@@ -17,7 +17,7 @@ A platform that integrates with the group service often needs to keep its own
 backend in sync with group membership held in AT Protocol — e.g. synchronising
 a platform-side group membership list with the group service's view of who
 belongs to a group. The original request ([#12](https://github.com/hypercerts-org/certified-group-service/issues/12))
-was narrow: a read-only key for `member.list`. Combined with Ma Earth's need to
+was narrow: a read-only key for `member.list`. Combined with a separate need to
 authenticate _write_ access from a backend (retroactively repairing broken
 records), it became clear the key mechanism must be **generalised** rather than
 bolted onto a single method — see _Group targeting_ below.
@@ -42,7 +42,7 @@ repeatedly.
 ## Goals
 
 - An owner can mint a long-lived key scoped to a **single read-only operation**
-  (`member.list`) — the concrete need for Ma Earth.
+  (`member.list`) — the concrete need that motivated this work.
 - An owner can **list** and **revoke** keys they have issued.
 - The scope model is **extensible** so further scopes (more read ops, then
   PDS-repo reads, then writes) can be added incrementally without redesign.
@@ -82,8 +82,8 @@ the two ways doesn't work for API keys at all.
   the group DID.
 - **`member.list` and other queries** carry the group **only** in the JWT
   `aud` claim. There is no group request parameter; passing one is actively
-  rejected (`"Invalid query parameter: groupDid"`, observed in maearth-app's
-  `DirectCgsClient`). The group is implied entirely by the token.
+  rejected (`"Invalid query parameter: groupDid"`, observed in a client
+  integration's direct CGS client). The group is implied entirely by the token.
 
 So the resource selector (which group) and the auth credential (the JWT) are
 entangled differently per method.
@@ -105,7 +105,7 @@ token is presented to** — the audience identifies the _recipient_, not the
 _resource_ being acted on. The reference library enforces `payload.aud ===
 ownDid` unless you pass `null` to skip it; this service passes `null`
 (`src/auth/verifier.ts`) precisely so it can repurpose `aud` as a group
-selector. maearth-app mirrors this by requesting
+selector. Existing clients mirror this by requesting
 `com.atproto.server.getServiceAuth?aud=<groupDid>`.
 
 Fixing that overload is a prerequisite, tracked separately as
@@ -364,7 +364,7 @@ data. Because the group is named by the request and located by forward hash,
 | -------------- | ---- | -------------------------------------------------------------- |
 | `key_ref`      | text | PK; the non-secret `<keyRef>` in the key string                |
 | `key_hash`     | text | SHA-256 of the secret; never the plaintext                     |
-| `name`         | text | owner-supplied label (e.g. "Ma Earth backend")                 |
+| `name`         | text | owner-supplied label (e.g. "platform backend")                 |
 | `scopes`       | text | JSON array of scope strings                                    |
 | `created_by`   | text | owner DID that minted the key                                  |
 | `created_at`   | text | `defaultTo(sql\`(datetime('now'))\`)`, per existing convention |
@@ -511,11 +511,11 @@ registered via `registerAuthedMethod` in `src/api/index.ts`.
 
 ---
 
-## Worked example: Ma Earth membership sync
+## Worked example: platform membership sync
 
 1. Group owner logs in to the platform; platform mints an owner service-auth
    JWT as today.
-2. Platform calls `keys.create { name: "Ma Earth sync", scopes:
+2. Platform calls `keys.create { name: "platform backend sync", scopes:
 ["rpc:app.certified.group.member.list"] }` → receives `cgsk_…` once.
 3. Platform stores the key in its backend secret store. (Storing a key good
    only for one read-only op is far less sensitive than full read/write.)
