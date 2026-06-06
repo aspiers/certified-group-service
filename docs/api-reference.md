@@ -63,6 +63,21 @@ A transitional form remains accepted during the migration window: set the JWT `a
 
 For the full migration walkthrough (per-method `repo` placement, direct vs proxied, detecting un-migrated calls) see [`aud-migration.md`](./aud-migration.md); for the design rationale see [`design/aud-deprecation.md`](./design/aud-deprecation.md).
 
+## Authenticating with an API key
+
+As an alternative to a per-request service-auth JWT, an owner can issue a long-lived **API key** (see [API key management](#api-key-management)). A backend authenticates by sending the key in the `X-API-Key` header instead of `Authorization: Bearer`:
+
+```text
+X-API-Key: cgsk_<keyRef>.<secret>
+```
+
+The group is named exactly as on the JWT path — `repo` on the querystring for queries, in the body for procedures. There is no `aud`, no nonce, and no 2-minute lifetime: the key is valid until revoked. A key is constrained by its granted **scopes** _and_ by the role of the owner that issued it; a request outside the key's scopes is rejected with `403`. Iteration 1 grants only `app.certified.group.member.list`.
+
+```bash
+curl "https://group-service.example.com/xrpc/app.certified.group.member.list?repo=did:plc:group123" \
+  -H "X-API-Key: cgsk_ab12cd34.Zlen…"
+```
+
 ## Health check
 
 ### `GET /health` / `GET /xrpc/_health`
@@ -645,6 +660,64 @@ curl -X POST https://group-service.example.com/xrpc/app.certified.group.role.set
     "role": "admin"
   }'
 ```
+
+---
+
+## API key management
+
+Owner-only methods for issuing and revoking [API keys](#authenticating-with-an-api-key). All three are authenticated with a normal owner **JWT** (not a key — a key can never manage keys). They target a group the same way as other group-scoped methods (`repo` in the body for the procedures, on the querystring for the `list` query).
+
+### `POST /xrpc/app.certified.group.keys.create`
+
+Mint a key. Owner-only.
+
+Request body:
+
+```json
+{
+  "repo": "did:plc:group123",
+  "name": "platform backend",
+  "scopes": ["rpc:app.certified.group.member.list"]
+}
+```
+
+Response — the plaintext `key` is returned **only here**:
+
+```json
+{
+  "keyRef": "ab12cd34",
+  "key": "cgsk_ab12cd34.Zlen…",
+  "scopes": ["rpc:app.certified.group.member.list"],
+  "createdAt": "2026-06-06T12:00:00.000Z"
+}
+```
+
+Errors: `Forbidden` (not the owner), `InvalidScope` (an unparseable scope string).
+
+### `GET /xrpc/app.certified.group.keys.list`
+
+List the group's keys. Owner-only. Never returns the secret or its hash. Params: `repo`, `limit`, `cursor`, `includeRevoked` (default `false`).
+
+```json
+{
+  "keys": [
+    {
+      "keyRef": "ab12cd34",
+      "name": "platform backend",
+      "scopes": ["rpc:app.certified.group.member.list"],
+      "createdBy": "did:plc:owner",
+      "createdAt": "2026-06-06T12:00:00.000Z",
+      "lastUsedAt": "2026-06-06T12:05:00.000Z"
+    }
+  ]
+}
+```
+
+### `POST /xrpc/app.certified.group.keys.delete`
+
+Revoke a key (soft-delete; rejected on next use). Owner-only. Idempotent.
+
+Request body: `{ "repo": "did:plc:group123", "keyRef": "ab12cd34" }`. Response: `{ "keyRef": "ab12cd34", "revokedAt": "2026-06-06T13:00:00.000Z" }`. Errors: `Forbidden`, `KeyNotFound`.
 
 ---
 

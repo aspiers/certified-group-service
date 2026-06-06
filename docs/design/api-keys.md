@@ -1,6 +1,6 @@
 # Design: API Keys for the Group Service
 
-Status: **Draft / proposal**
+Status: **Implemented** (iteration 1 — read-only `member.list` scope)
 
 Tracking issues:
 
@@ -209,7 +209,7 @@ if (!granted.matches('rpc', { lxm: 'app.certified.group.member.list', aud: servi
 > earlier pseudo-code had both wrong — see [[reference_atproto-oauth-scopes-api]]):
 >
 > - **`ScopesSet.matches(resource, options)` is two-arg** — `matches('rpc', {
->   lxm, aud })`, not `matches({ lxm, aud })`. The single-arg form silently
+lxm, aud })`, not `matches({ lxm, aud })`. The single-arg form silently
 >   returns `false` (treats the object as the `resource` key). `has(needed)`
 >   also won't match reliably because the stored string is normalised
 >   (`#` → `%23`); always go through `matches`.
@@ -555,9 +555,8 @@ registered via `registerAuthedMethod` in `src/api/index.ts`.
   entirely. But CGS's `config.serviceDid` is a **bare** `did:web:${hostname}`
   (`src/config.ts`). **Decision:** define one constant
   `SERVICE_SCOPE_AUD = \`${config.serviceDid}#certified_group_service\`` used
-  for **both** minting (`keys.create` →
-  `RpcPermission.scopeNeededFor({ aud: SERVICE_SCOPE_AUD })`) and checking
-  (`gate` → `ScopesSet.matches('rpc', { lxm, aud: SERVICE_SCOPE_AUD })`), so it
+for **both** minting (`keys.create`→`RpcPermission.scopeNeededFor({ aud: SERVICE_SCOPE_AUD })`) and checking
+(`gate`→`ScopesSet.matches('rpc', { lxm, aud: SERVICE_SCOPE_AUD })`), so it
   stays internally consistent regardless of the bare-DID config value.
   - This scope-layer `aud` is **independent** of the JWT-auth `aud`. The
     JWT-auth check **must stay bare-DID-tolerant**: the reference PDS **strips

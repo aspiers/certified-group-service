@@ -99,6 +99,35 @@ export async function callXrpc(sink: HttpSink, opts: CallOpts): Promise<void> {
 }
 
 /**
+ * Call an XRPC method with an API key in the `X-API-Key` header (no JWT). The
+ * group is named by `repo` — querystring for queries, body for procedures —
+ * exactly like the JWT new path. This is the long-lived-credential path a
+ * backend daemon uses (api-keys, #26).
+ */
+export async function callXrpcWithApiKey(
+  sink: HttpSink,
+  opts: {
+    cgsUrl: string
+    nsid: string
+    apiKey: string
+    body?: unknown
+    method?: 'GET' | 'POST'
+    repo?: string
+  },
+): Promise<void> {
+  const headers: Record<string, string> = { 'X-API-Key': opts.apiKey }
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+
+  const res = await fetch(xrpcUrl(opts.cgsUrl, opts.nsid, opts.repo), {
+    method: opts.method ?? 'POST',
+    headers,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  })
+
+  await recordResponse(sink, res)
+}
+
+/**
  * Raw-stream upload for app.certified.group.repo.uploadBlob — the handler reads
  * the raw request body (not JSON), so the bytes go straight in the body with the
  * blob's own Content-Type.

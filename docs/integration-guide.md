@@ -666,3 +666,48 @@ placement, the direct-vs-proxied details, and how to detect un-migrated calls �
 **[Migrating group targeting (`aud` → `repo`)](./aud-migration.md)**. For the design
 rationale (unsigned `repo`, the resolution round-trip, security), see
 [`design/aud-deprecation.md`](./design/aud-deprecation.md).
+
+## API keys: long-lived backend access (#26)
+
+A service-auth JWT is short-lived (≤ 2 minutes) and single-use — correct for
+interactive, per-request access, but a poor fit for a **backend daemon** that wants
+to poll group data indefinitely without holding the owner's signing key. For that,
+an owner can issue a long-lived, scope-limited **API key**.
+
+The flow (the platform backend-sync example):
+
+1. **Owner mints a key** (one-time, with a normal owner JWT). The plaintext is
+   returned exactly once — store it in your backend secret store.
+
+   ```typescript
+   const { data } = await fetch(`${GROUP_SERVICE}/xrpc/app.certified.group.keys.create`, {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ownerJwt}` },
+     body: JSON.stringify({
+       repo: groupDid,
+       name: 'platform backend',
+       scopes: ['rpc:app.certified.group.member.list'],
+     }),
+   }).then((r) => r.json())
+   // data.key === 'cgsk_…'  ← store this now; it is never returned again
+   ```
+
+2. **Backend polls with the key** — `X-API-Key` instead of a JWT, the group named
+   by `repo`. No login, no `getServiceAuth`, no 2-minute refresh, no owner
+   credentials held by the backend.
+
+   ```typescript
+   const res = await fetch(
+     `${GROUP_SERVICE}/xrpc/app.certified.group.member.list?repo=${groupDid}`,
+     { headers: { 'X-API-Key': process.env.CGS_API_KEY! } },
+   )
+   ```
+
+3. **Revoke if leaked** — `app.certified.group.keys.delete { repo, keyRef }`. The
+   key is rejected on its next use.
+
+A key is constrained by **both** its scopes and the role of the owner that issued it,
+and can only reach operations it is scoped for (iteration 1: `member.list`). A key
+can never manage keys. Storing a key good for one read-only operation is far less
+sensitive than holding the owner's signing key. See `docs/design/api-keys.md`.
+>>>>>>> 510b336 (test(e2e): api-keys flow + changeset + docs; mark design implemented (cgs-15a))
