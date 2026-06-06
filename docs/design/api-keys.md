@@ -196,13 +196,29 @@ package's own helpers, instead of our own ad-hoc strings:
 import { ScopesSet, RpcPermission } from '@atproto/oauth-scopes'
 
 // At request time, given an api-key credential:
-const granted = ScopesSet.fromString(JSON.stringify(key.scopes))
-const needed = RpcPermission.scopeNeededFor({
-  lxm: 'app.certified.group.member.list',
-  aud: ctx.serviceDid,
-})
-if (!granted.has(needed) /* or granted.matches(...) */) throw new Forbidden()
+// `ScopesSet.fromString` takes a SPACE-SEPARATED scope string, not JSON —
+// join the stored array with a space.
+const granted = ScopesSet.fromString(key.scopes.join(' '))
+// `matches` takes TWO args: the resource kind, then the match options.
+if (!granted.matches('rpc', { lxm: 'app.certified.group.member.list', aud: serviceAud })) {
+  throw new Forbidden()
+}
 ```
+
+> **Two API facts verified against `@atproto/oauth-scopes@0.5.0`** (the design's
+> earlier pseudo-code had both wrong — see [[reference_atproto-oauth-scopes-api]]):
+>
+> - **`ScopesSet.matches(resource, options)` is two-arg** — `matches('rpc', {
+>   lxm, aud })`, not `matches({ lxm, aud })`. The single-arg form silently
+>   returns `false` (treats the object as the `resource` key). `has(needed)`
+>   also won't match reliably because the stored string is normalised
+>   (`#` → `%23`); always go through `matches`.
+> - **The `aud` must be a service-ref DID with a fragment**
+>   (`did:web:host#fragment`), not a bare DID. `isAtprotoDidRefAbsolute`
+>   **rejects bare `did:plc:*` and fragment-less `did:web`** outright — only
+>   `did:web:host#frag` passes. CGS must therefore expose its service DID as a
+>   `did:web:…#<service-id>` ref for `rpc:` scopes to validate. This needs
+>   confirming against the deployed service DID — see Open questions.
 
 Group-service XRPC methods are a natural fit for **`rpc:` scopes** (they are
 RPC calls to our service, audience = our service DID). When we later proxy
@@ -532,6 +548,21 @@ registered via `registerAuthedMethod` in `src/api/index.ts`.
   request, but the legacy JWT path still accepts `aud=groupDid`. During the
   deprecation window both must coexist; confirm the key path can rely on the new
   field being present before #27's hard cutover.
+- **Service-DID format for `rpc:` scope `aud` (NEW — found at dep-add).**
+  `@atproto/oauth-scopes` validates the `aud` in an `rpc:` scope with
+  `isAtprotoDidRefAbsolute`, which **requires a `did:web:host#fragment`
+  service ref** — it rejects a bare `did:web:host` and rejects `did:plc:*`
+  entirely. But CGS's `config.serviceDid` is a **bare** `did:web:${hostname}`
+  (`src/config.ts`). So `RpcPermission.scopeNeededFor({ aud: config.serviceDid })`
+  would build an invalid scope and `matches` would always fail. Options for the
+  `gate`/scope work: (a) append a fixed service-id fragment (e.g.
+  `${serviceDid}#cgs`) when constructing/validating scopes; (b) store scopes
+  with `aud=*` and rely on `lxm` matching only; (c) don't put the real service
+  DID in the scope at all and define our own constant ref. Leaning (a) — a
+  single `SERVICE_SCOPE_AUD = \`${serviceDid}#cgs\`` constant used both when
+  minting (`keys.create`) and checking (`gate`), so it stays internally
+  consistent regardless of the bare-DID config value. Tracked on the `gate`
+  bead.
 
 ## Future extensions
 
