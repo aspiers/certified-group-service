@@ -54,8 +54,10 @@ export default function (server: Server, ctx: AppContext) {
         revokedAt = updated.revoked_at
       }
 
+      // `revokedKeyRef` (the key this action revoked), distinct from `apiKeyRef`
+      // which attributes an action performed *by* a key (see assertCanWithAudit).
       await ctx.audit.log(groupDb, callerDid, 'keys.delete', 'permitted', {
-        apiKeyRef: keyRef,
+        revokedKeyRef: keyRef,
       })
 
       return jsonResponse({ keyRef, revokedAt: sqliteToIso(revokedAt!) })

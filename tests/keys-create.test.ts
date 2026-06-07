@@ -59,6 +59,34 @@ describe('keys.create', () => {
     expect(JSON.stringify(row)).not.toContain(parsed.secret)
   })
 
+  it('accepts the friendly rpc:<lxm> scope and stores the canonical aud-bound form', async () => {
+    await seedMember(groupDb, 'did:plc:testuser', 'owner')
+    const res = await request(app)
+      .post('/xrpc/app.certified.group.keys.create')
+      .send({ name: 'platform backend', scopes: ['rpc:app.certified.group.member.list'] })
+
+    expect(res.status).toBe(200)
+    // The client sent the short form; the server canonicalized to the aud-bound
+    // scope the gate checks against.
+    expect(res.body.scopes).toEqual([MEMBER_LIST_SCOPE])
+    const row = await groupDb
+      .selectFrom('group_api_keys')
+      .select('scopes')
+      .where('key_ref', '=', res.body.keyRef)
+      .executeTakeFirst()
+    expect(JSON.parse(row!.scopes)).toEqual([MEMBER_LIST_SCOPE])
+  })
+
+  it('rejects a scope whose aud names a different service with InvalidScope', async () => {
+    await seedMember(groupDb, 'did:plc:testuser', 'owner')
+    const foreign = `rpc:app.certified.group.member.list?aud=did:web:other.example.com%23certified_group_service`
+    const res = await request(app)
+      .post('/xrpc/app.certified.group.keys.create')
+      .send({ name: 'foreign', scopes: [foreign] })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBe('InvalidScope')
+  })
+
   it('rejects a non-owner (admin) with Forbidden', async () => {
     await seedMember(groupDb, 'did:plc:testuser', 'admin')
     const res = await request(app)

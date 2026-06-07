@@ -6,6 +6,8 @@ import {
   scopeNeededFor,
   scopesCoverOperation,
   firstInvalidScope,
+  canonicalizeScope,
+  canonicalizeScopes,
 } from '../src/auth/scopes.js'
 
 const SERVICE_DID = 'did:web:groups.example.com'
@@ -82,5 +84,50 @@ describe('firstInvalidScope', () => {
 
   it('returns the first invalid scope string', () => {
     expect(firstInvalidScope([MEMBER_LIST_SCOPE, 'not-a-scope'])).toBe('not-a-scope')
+  })
+})
+
+describe('canonicalizeScope', () => {
+  it('expands a friendly rpc:<lxm> to the aud-bound canonical form', () => {
+    const r = canonicalizeScope('rpc:app.certified.group.member.list', SERVICE_DID)
+    expect(r).toEqual({ ok: true, scope: MEMBER_LIST_SCOPE })
+  })
+
+  it('accepts an already-canonical scope whose aud is this service', () => {
+    const r = canonicalizeScope(MEMBER_LIST_SCOPE, SERVICE_DID)
+    expect(r).toEqual({ ok: true, scope: MEMBER_LIST_SCOPE })
+  })
+
+  it('rejects a scope whose aud names a DIFFERENT service DID', () => {
+    const foreign = scopeNeededFor('member.list', 'did:web:other.example.com')!
+    const r = canonicalizeScope(foreign, SERVICE_DID)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toMatch(/aud must be this service/)
+  })
+
+  it('rejects a scope with the right DID but a DIFFERENT service fragment', () => {
+    const wrongFragment = `rpc:app.certified.group.member.list?aud=${SERVICE_DID}%23some_other_service`
+    const r = canonicalizeScope(wrongFragment, SERVICE_DID)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toMatch(/aud must be this service/)
+  })
+
+  it('rejects a non-rpc / malformed scope', () => {
+    expect(canonicalizeScope('not-a-scope', SERVICE_DID).ok).toBe(false)
+    expect(canonicalizeScope('repo:app.bsky.feed.post', SERVICE_DID).ok).toBe(false)
+  })
+})
+
+describe('canonicalizeScopes', () => {
+  it('canonicalizes a whole list', () => {
+    const r = canonicalizeScopes(['rpc:app.certified.group.member.list'], SERVICE_DID)
+    expect(r).toEqual({ ok: true, scopes: [MEMBER_LIST_SCOPE] })
+  })
+
+  it('fails on the first bad scope, naming it', () => {
+    const foreign = scopeNeededFor('member.list', 'did:web:other.example.com')!
+    const r = canonicalizeScopes(['rpc:app.certified.group.member.list', foreign], SERVICE_DID)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.scope).toBe(foreign)
   })
 })

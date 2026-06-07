@@ -77,3 +77,60 @@ export function firstInvalidScope(scopes: string[]): string | null {
   }
   return null
 }
+
+/** Outcome of canonicalizing one client-supplied scope string. */
+export type ScopeCanonicalization =
+  | { ok: true; scope: string }
+  | { ok: false; scope: string; reason: string }
+
+/**
+ * Canonicalize a client-supplied `rpc:` scope to this service's stored form.
+ *
+ * A key only ever calls the CGS it was created on, so the scope `aud` can only
+ * be this service's ref — there is no other valid value. Clients therefore pass
+ * the friendly `rpc:<lxm>` form and we append the `aud` here, matching what the
+ * gate checks. An already-canonical scope is accepted idempotently **iff** its
+ * `aud` is ours; a scope naming a different `aud` is rejected (it could never
+ * match the gate, so storing it would be a silent dead grant).
+ */
+export function canonicalizeScope(scope: string, serviceDid: string): ScopeCanonicalization {
+  const aud = serviceScopeAud(serviceDid)
+
+  // Already carries params (an `aud=`): accept only if that aud is ours.
+  if (scope.includes('?')) {
+    const parsed = RpcPermission.fromString(scope)
+    if (parsed === null) return { ok: false, scope, reason: 'unparseable scope' }
+    if (parsed.aud !== aud) {
+      return { ok: false, scope, reason: `scope aud must be this service (${aud})` }
+    }
+    return { ok: true, scope }
+  }
+
+  // Bare `rpc:<lxm>` — derive the lxm and rebuild via the package helper so the
+  // stored string is exactly what the gate computes.
+  const match = /^rpc:(?<lxm>[^?]+)$/.exec(scope)
+  if (!match?.groups?.lxm) return { ok: false, scope, reason: 'not an rpc: scope' }
+  const canonical = RpcPermission.scopeNeededFor({ lxm: match.groups.lxm, aud })
+  if (RpcPermission.fromString(canonical) === null) {
+    return { ok: false, scope, reason: 'invalid rpc method (lxm)' }
+  }
+  return { ok: true, scope: canonical }
+}
+
+/**
+ * Canonicalize a list of client scopes. Returns the canonical list on success,
+ * or the first scope that failed (with a reason) so the caller can surface an
+ * `InvalidScope` error naming it.
+ */
+export function canonicalizeScopes(
+  scopes: string[],
+  serviceDid: string,
+): { ok: true; scopes: string[] } | { ok: false; scope: string; reason: string } {
+  const out: string[] = []
+  for (const scope of scopes) {
+    const result = canonicalizeScope(scope, serviceDid)
+    if (!result.ok) return { ok: false, scope: result.scope, reason: result.reason }
+    out.push(result.scope)
+  }
+  return { ok: true, scopes: out }
+}

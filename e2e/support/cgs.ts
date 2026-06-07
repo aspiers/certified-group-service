@@ -100,9 +100,10 @@ export async function callXrpc(sink: HttpSink, opts: CallOpts): Promise<void> {
 
 /**
  * Call an XRPC method with an API key in the `X-API-Key` header (no JWT). The
- * group is named by `repo` — querystring for queries, body for procedures —
- * exactly like the JWT new path. This is the long-lived-credential path a
- * backend daemon uses (api-keys, #26).
+ * group is named by `repo` on the **querystring**: API-key auth resolves the
+ * group before the JSON body is parsed, so (unlike a JWT procedure call) it
+ * cannot read a body `repo`. All key-accessible ops in iteration 1 are queries,
+ * so this is sufficient. The long-lived-credential path a backend uses (#26).
  */
 export async function callXrpcWithApiKey(
   sink: HttpSink,

@@ -52,9 +52,12 @@ export function formatApiKey(keyRef: string, secret: string): string {
 /**
  * Parse a key string into its parts, or return null if it is malformed.
  *
- * Strict: requires the exact `cgsk_<keyRef>.<secret>` shape with non-empty,
- * dot-free, underscore-free parts. base64url contains neither `.` nor `_`,
- * so splitting on the single `.` and the leading `cgsk_` is unambiguous.
+ * Requires the exact `cgsk_<keyRef>.<secret>` shape with non-empty parts. The
+ * split is unambiguous even though base64url uses `-` and `_`: the prefix is
+ * split on the FIRST `_` (and the fixed `cgsk` prefix contains none), and the
+ * keyRef/secret on the FIRST `.` (base64url contains no `.`). So a `_` inside
+ * the keyRef or secret is harmless — only the leading `cgsk_` boundary and the
+ * single separating `.` are structural.
  */
 export function parseApiKey(input: string): ParsedApiKey | null {
   if (typeof input !== 'string') return null

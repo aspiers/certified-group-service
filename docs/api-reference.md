@@ -71,7 +71,7 @@ As an alternative to a per-request service-auth JWT, an owner can issue a long-l
 X-API-Key: cgsk_<keyRef>.<secret>
 ```
 
-The group is named exactly as on the JWT path — `repo` on the querystring for queries, in the body for procedures. There is no `aud`, no nonce, and no 2-minute lifetime: the key is valid until revoked. A key is constrained by its granted **scopes** _and_ by the role of the owner that issued it; a request outside the key's scopes is rejected with `403`. Iteration 1 grants only `app.certified.group.member.list`.
+The group is named with `repo` on the **querystring** (`?repo=<handle-or-did>`). Unlike the JWT path, an API-key request must put `repo` on the querystring even for procedures: API-key auth resolves the group before the JSON body is parsed, so a body `repo` is invisible at authentication time. In practice this is moot in iteration 1 — the only key-accessible operation, `member.list`, is a query. There is no `aud`, no nonce, and no 2-minute lifetime: the key is valid until revoked. A key is constrained by its granted **scopes** _and_ by the role of the owner that issued it; a request outside the key's scopes is rejected with `403`.
 
 ```bash
 curl "https://group-service.example.com/xrpc/app.certified.group.member.list?repo=did:plc:group123" \
@@ -681,18 +681,22 @@ Request body:
 }
 ```
 
+Pass each scope by its friendly `rpc:<method>` name. A key only ever calls the CGS it was minted on, so the service binds each scope to its own audience (`?aud=did:web:<host>%23certified_group_service`) before storing — you do **not** supply an `aud`. The response echoes the stored **canonical** form.
+
 Response — the plaintext `key` is returned **only here**:
 
 ```json
 {
   "keyRef": "ab12cd34",
   "key": "cgsk_ab12cd34.Zlen…",
-  "scopes": ["rpc:app.certified.group.member.list"],
+  "scopes": [
+    "rpc:app.certified.group.member.list?aud=did:web:group-service.example.com%23certified_group_service"
+  ],
   "createdAt": "2026-06-06T12:00:00.000Z"
 }
 ```
 
-Errors: `Forbidden` (not the owner), `InvalidScope` (an unparseable scope string).
+Errors: `Forbidden` (not the owner), `InvalidScope` (a scope that is unparseable, names a non-RPC method, or carries an `aud` for a different service).
 
 ### `GET /xrpc/app.certified.group.keys.list`
 
@@ -704,7 +708,9 @@ List the group's keys. Owner-only. Never returns the secret or its hash. Params:
     {
       "keyRef": "ab12cd34",
       "name": "platform backend",
-      "scopes": ["rpc:app.certified.group.member.list"],
+      "scopes": [
+        "rpc:app.certified.group.member.list?aud=did:web:group-service.example.com%23certified_group_service"
+      ],
       "createdBy": "did:plc:owner",
       "createdAt": "2026-06-06T12:00:00.000Z",
       "lastUsedAt": "2026-06-06T12:05:00.000Z"

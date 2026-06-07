@@ -686,10 +686,13 @@ The flow (the platform backend-sync example):
      body: JSON.stringify({
        repo: groupDid,
        name: 'platform backend',
+       // Pass scopes by their friendly `rpc:<method>` name. The service binds
+       // each to its own audience before storing — you don't supply an `aud`.
        scopes: ['rpc:app.certified.group.member.list'],
      }),
    }).then((r) => r.json())
    // data.key === 'cgsk_…'  ← store this now; it is never returned again
+   // data.scopes === ['rpc:app.certified.group.member.list?aud=…']  ← canonical form
    ```
 
 2. **Backend polls with the key** — `X-API-Key` instead of a JWT, the group named

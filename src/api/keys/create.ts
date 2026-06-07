@@ -9,7 +9,7 @@ import {
   sqliteToIso,
 } from '../util.js'
 import { generateApiKey } from '../../auth/api-key.js'
-import { firstInvalidScope } from '../../auth/scopes.js'
+import { canonicalizeScopes } from '../../auth/scopes.js'
 
 export default function (server: Server, ctx: AppContext) {
   registerAuthedMethod(server, 'app.certified.group.keys.create', ctx, {
@@ -27,10 +27,17 @@ export default function (server: Server, ctx: AppContext) {
       if (!Array.isArray(scopes) || scopes.length === 0) {
         throw new XRPCError(400, 'At least one scope is required', 'InvalidRequest')
       }
-      const bad = firstInvalidScope(scopes)
-      if (bad !== null) {
-        throw new XRPCError(400, `Invalid scope: ${bad}`, 'InvalidScope')
+
+      // Canonicalize to this service's stored form: a key only ever calls the
+      // CGS it was minted on, so we append our own scope `aud`. A friendly
+      // `rpc:<lxm>` is expanded; an already-canonical scope is accepted only if
+      // its `aud` is ours — a foreign service DID or wrong service fragment is
+      // rejected rather than stored as a dead grant.
+      const canon = canonicalizeScopes(scopes, ctx.config.serviceDid)
+      if (!canon.ok) {
+        throw new XRPCError(400, `Invalid scope: ${canon.scope} (${canon.reason})`, 'InvalidScope')
       }
+      const storedScopes = canon.scopes
 
       const groupDid = await resolveGroupDid(ctx, auth.credentials, repo)
       const groupDb = ctx.groupDbs.get(groupDid)
@@ -54,22 +61,24 @@ export default function (server: Server, ctx: AppContext) {
           key_ref: key.keyRef,
           key_hash: key.hash,
           name,
-          scopes: JSON.stringify(scopes),
+          scopes: JSON.stringify(storedScopes),
           created_by: callerDid,
         })
         .returning('created_at')
         .executeTakeFirstOrThrow()
 
+      // `createdKeyRef` (the key this action created), distinct from `apiKeyRef`
+      // which attributes an action performed *by* a key (see assertCanWithAudit).
       await ctx.audit.log(groupDb, callerDid, 'keys.create', 'permitted', {
-        apiKeyRef: key.keyRef,
+        createdKeyRef: key.keyRef,
         name,
-        scopes,
+        scopes: storedScopes,
       })
 
       return jsonResponse({
         keyRef: key.keyRef,
         key: key.plaintext, // returned exactly once
-        scopes,
+        scopes: storedScopes,
         createdAt: sqliteToIso(inserted.created_at),
       })
     },
