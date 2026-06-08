@@ -130,4 +130,84 @@ describe('assertCanWithAudit — API-key scope gate', () => {
       assertCanWithAudit(ctx, groupDb, 'did:plc:owner', 'member.list'),
     ).resolves.toBeUndefined()
   })
+
+  // --- PDS-repo write ops gated by repo: scopes (collection+action) ---
+
+  const POST = 'app.bsky.feed.post'
+  const detailFor = (collection: string) => ({ collection })
+
+  it('permits createRecord when a repo: scope covers the collection+action', async () => {
+    await expect(
+      assertCanWithAudit(
+        ctx,
+        groupDb,
+        'did:plc:owner',
+        'createRecord',
+        detailFor(POST),
+        apiKeyPrincipal([`repo:${POST}?action=create`]),
+      ),
+    ).resolves.toBeUndefined()
+  })
+
+  it('denies createRecord on a collection the repo: scope does not cover', async () => {
+    await expect(
+      assertCanWithAudit(
+        ctx,
+        groupDb,
+        'did:plc:owner',
+        'createRecord',
+        detailFor('app.bsky.actor.profile'),
+        apiKeyPrincipal([`repo:${POST}?action=create`]),
+      ),
+    ).rejects.toThrow(/scopes do not permit/)
+  })
+
+  it('denies createRecord when the repo: scope grants a different action', async () => {
+    await expect(
+      assertCanWithAudit(
+        ctx,
+        groupDb,
+        'did:plc:owner',
+        'createRecord',
+        detailFor(POST),
+        apiKeyPrincipal([`repo:${POST}?action=delete`]),
+      ),
+    ).rejects.toThrow(/scopes do not permit/)
+  })
+
+  it('denies a write when the key only holds an rpc: (read) scope', async () => {
+    await expect(
+      assertCanWithAudit(
+        ctx,
+        groupDb,
+        'did:plc:owner',
+        'createRecord',
+        detailFor(POST),
+        apiKeyPrincipal([MEMBER_LIST_SCOPE]),
+      ),
+    ).rejects.toThrow(/scopes do not permit/)
+  })
+
+  it('denies a write when the collection is missing from the request detail', async () => {
+    await expect(
+      assertCanWithAudit(
+        ctx,
+        groupDb,
+        'did:plc:owner',
+        'createRecord',
+        undefined, // no collection
+        apiKeyPrincipal([`repo:${POST}?action=create`]),
+      ),
+    ).rejects.toThrow(/scopes do not permit/)
+  })
+
+  it('deleteOwnRecord and deleteAnyRecord are both covered by an action=delete scope', async () => {
+    const del = apiKeyPrincipal([`repo:${POST}?action=delete`])
+    await expect(
+      assertCanWithAudit(ctx, groupDb, 'did:plc:owner', 'deleteOwnRecord', detailFor(POST), del),
+    ).resolves.toBeUndefined()
+    await expect(
+      assertCanWithAudit(ctx, groupDb, 'did:plc:owner', 'deleteAnyRecord', detailFor(POST), del),
+    ).resolves.toBeUndefined()
+  })
 })

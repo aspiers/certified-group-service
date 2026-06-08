@@ -9,7 +9,7 @@ import type { GroupDatabase } from '../db/schema.js'
 import { XRPCError as ClientXRPCError } from '@atproto/xrpc'
 import { XRPCError, UpstreamFailureError, ForbiddenError } from '@atproto/xrpc-server'
 import type { PdsAgentPool } from '../pds/agent.js'
-import { scopesCoverOperation } from '../auth/scopes.js'
+import { scopesCoverOperation, repoActionForOperation, repoScopesCover } from '../auth/scopes.js'
 
 /**
  * The auth-mode-dependent slice of the credential the gate needs: for an
@@ -127,7 +127,19 @@ export async function assertCanWithAudit(
 
   if (principal?.authKind === 'apiKey') {
     const scopes = principal.scopes ?? []
-    if (!scopesCoverOperation(scopes, operation, ctx.config.serviceDid)) {
+    const repoAction = repoActionForOperation(operation)
+    let covered: boolean
+    if (repoAction !== undefined) {
+      // PDS-repo write op: gated by a `repo:<collection>?action=…` scope. The
+      // collection comes from the request (carried in the audit detail by the
+      // handler). With no collection we cannot match a scope, so deny.
+      const collection = typeof detail?.collection === 'string' ? detail.collection : undefined
+      covered = collection !== undefined && repoScopesCover(scopes, operation, collection)
+    } else {
+      // Service method: gated by an `rpc:` scope.
+      covered = scopesCoverOperation(scopes, operation, ctx.config.serviceDid)
+    }
+    if (!covered) {
       await denied(`API key scopes do not permit '${operation}'`)
     }
   }
