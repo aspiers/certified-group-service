@@ -268,9 +268,10 @@ is _supposed_ to find which service hosts a group — that on-protocol link is t
 whole point of the chain. A client should not hardcode the service URL to skip it:
 doing so couples the client to one deployment and breaks the moment a group is
 hosted elsewhere. (Our first client app does hardcode it, but only as a workaround
-for a specific bug — the PDS caches the group's DID document at account-creation
-time, before CGS inserts the `certified_group` service record, so an immediate
-resolution can miss the entry. That is a bug to fix, not a pattern to follow.)
+for a specific bug — the ePDS caches the group's DID document at account-creation
+time (the genesis doc), before CGS inserts the `certified_group` service record, so
+an immediate resolution can miss the entry. Tracked as `HYPER-453`; a bug to fix,
+not a pattern to follow.)
 
 What legitimately shortens the chain is the **method type**, not skipping
 discovery: direct calls don't proxy, so they skip hops B→C (they assert `aud`
