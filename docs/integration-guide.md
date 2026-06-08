@@ -190,10 +190,14 @@ const groupAgent = createGroupAgent(agent, groupDid)
 > the PDS mints the service-auth JWT with `aud` = the **group DID**. That is the
 > deprecated targeting form: it still works, but every response now carries an RFC
 > 8594 `Deprecation: true` header. The supported form names the group with an
-> explicit `repo` field and sets `aud` to the **service DID**. The examples in Step 3
-> below add `repo` (which alone silences the deprecation warning); see
-> [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27)
-> for the full picture.
+> explicit `repo` field and sets `aud` to the **service DID** — but a proxying PDS
+> mints `aud` from the proxy target, so the proxied path cannot reach `aud` = service
+> DID on the current release (see
+> [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27)).
+> Adding `repo` silences the warning **only for query methods** (where `repo` rides the
+> querystring, visible at auth time); for the JSON-body procedures in Step 3 it does
+> not, because the body is invisible when the service decides legacy-vs-new. Use direct
+> calls where full migration matters.
 
 ## Step 3: Make authenticated requests
 
@@ -205,15 +209,16 @@ field — an `at-identifier` (a handle **or** a DID). For JSON-body procedures
 `role.set`) `repo` goes in the **body**; for query methods (`member.list`,
 `audit.query`) and the raw/body-less methods (`repo.uploadBlob`, `group.destroy`)
 it goes in the **querystring** (`?repo=<handle-or-did>`). This is exactly what a
-stock `@atproto/api` typed call already emits, so passing `repo` is all the new
-path requires.
+stock `@atproto/api` typed call already emits.
 
-> **Targeting a group (#27 shipped):** the group is identified by the `repo`
-> field above, and the JWT `aud` is the **service DID**. The older form — group
-> taken from the JWT `aud` with no `repo` — is **deprecated but still accepted**;
-> the proxy agent from Step 2 lands you on it (it mints `aud` = the group DID).
-> Adding `repo` activates the supported path and silences the deprecation warning.
-> See [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27)
+> **Targeting a group (#27):** the group is identified by the `repo` field above,
+> and the supported form sets the JWT `aud` to the **service DID**. The older form —
+> group taken from the JWT `aud` with no `repo` — is **deprecated but still accepted**;
+> the proxy agent from Step 2 lands you on it (it mints `aud` = the group DID). Adding
+> `repo` clears the deprecation warning **only for query methods**; for the JSON-body
+> procedures below it does not, and a proxied call cannot set `aud` = service DID on the
+> current release — so these examples remain on the legacy path. See
+> [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27)
 > and `docs/design/aud-deprecation.md`.
 
 ```typescript
@@ -659,21 +664,42 @@ Link: <https://github.com/hypercerts-org/certified-group-service/issues/27>; rel
 There is no `Sunset` header yet — a removal date is undecided. Watch for `Deprecation:
 true` on your responses to find un-migrated calls.
 
-**The two independent migration steps.** Precedence is decided by the presence of
-`repo`: send it and the supported path is used regardless of `aud`. So you can migrate
-in either order, or both at once:
+**Finding the service DID.** `aud` must be the **service DID**, which is a `did:web`
+derived from the service URL — strip the scheme, use the host:
+`https://group-service.example.com` → `did:web:group-service.example.com`. No lookup
+is needed to build it; it is the `GROUP_SERVICE_DID` constant at the top of this guide.
+The on-protocol link from a group to its service is the `certified_group` service entry
+in the **group's** DID document, whose `serviceEndpoint` is the service URL — read it if
+you only have a `groupDid` and need to discover the service, then derive the service DID
+from its host. (That entry is also what a proxying PDS reads to route the request, so it
+is needed on both the direct and proxied paths.)
 
-1. **Add `repo`** to each group-scoped call (body for procedures, querystring for
-   queries / raw-body methods, per the tables above). This alone silences the
-   deprecation signal.
-2. **Switch the minted `aud`** from the group DID to the service DID. With `repo`
-   present, `aud` **must** be the service DID or the request is rejected with
-   `jwt audience does not match service did`.
+**The two migration steps.** They are not symmetric across method kinds, because the
+service decides legacy-vs-new at the **auth layer**, which sees the querystring but not
+the request body (auth runs before body parsing):
 
-Under service proxying, step 2 is governed by how the PDS mints the JWT for the
-proxy target, so the proxy agent in Step 2 is on the legacy path until that
-mechanism sets `aud` to the service DID; adding `repo` (step 1) still moves you off
-the deprecated targeting today. The direct-call form above is already fully migrated.
+1. **Add `repo`** — body for procedures, querystring for queries / raw-body methods.
+   For **queries** (and `uploadBlob` / `destroy`), the querystring `repo` is visible at
+   auth time, so adding it moves you onto the supported path immediately. For
+   **JSON-body procedures**, the body `repo` is invisible at auth time, so it does **not**
+   silence the deprecation signal on its own — step 2 is required.
+2. **Switch the minted `aud`** from the group DID to the service DID. With a querystring
+   `repo` present, `aud` **must** be the service DID or the request is rejected with
+   `jwt audience does not match service did`. For JSON-body procedures, setting `aud` to
+   the service DID is what takes the call off the legacy path (the body `repo` is then the
+   group selector).
+
+In all cases, the reliable way off the deprecated path is to mint `aud` = the service DID.
+
+**Direct vs. proxied today.** The **direct-call** form above (you mint the JWT yourself
+with `aud` = the service DID) is fully migratable now. **Service proxying** is not yet:
+`withProxy('certified_group', groupDid)` makes the PDS mint `aud` = the **group DID** (the
+proxy target's DID), which is the legacy form, and there is no supported way on the current
+release to make a proxying PDS mint `aud` = the service DID. So a proxied query can drop the
+deprecation warning by adding `?repo=`, but a proxied call cannot fully reach `aud` = service
+DID yet — that depends on the group service publishing a resolvable `did:web` document, which
+is upcoming work ([#29](https://github.com/hypercerts-org/certified-group-service/issues/29)).
+Until then, use direct calls where full migration matters.
 
 The legacy form keeps working for now and will be removed in a later release once
 clients have migrated. See `docs/design/aud-deprecation.md` for the full design and

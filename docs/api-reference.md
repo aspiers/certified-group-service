@@ -8,6 +8,17 @@ All endpoints (except `/health` and `/xrpc/_health`) require authentication via 
 - `jti` — a unique nonce (each token can only be used once)
 - `exp` — expiration timestamp
 
+## Determining the service DID
+
+`aud` is the **service DID**, and the service DID is a `did:web` derived directly from the service URL: strip the scheme and use the host — `https://group-service.example.com` → `did:web:group-service.example.com`. No network lookup is needed to construct it.
+
+How a client gets from a group it wants to act on to the service DID:
+
+1. **Find the group's service.** A group's DID document carries a `certified_group` service entry whose `serviceEndpoint` is the service URL. This is the only on-protocol link from a group to the service hosting it (`register` / `import` return the `groupDid`, not the service DID). This entry is the discovery anchor **regardless of how you call** — a direct caller reads it to learn the service URL, and a proxying PDS reads it to route the request.
+2. **Derive the service DID** from that URL's host as above, and set it as `aud`.
+
+> **Service proxying note.** When calling through a PDS with the `atproto-proxy` header (`<did>#certified_group`), the PDS mints the service-auth JWT with `aud` set to the **DID in the proxy header**. The standard proxy target is the **group** DID, so proxied calls currently land on the legacy `aud` = group DID form (see below). Setting `aud` to the service DID is fully supported on **direct** calls today; see the integration guide for the proxy-side migration status.
+
 ## Targeting a group
 
 Group-scoped methods name their target group with an explicit `repo` field — an `at-identifier` (a handle **or** a DID), resolved to the group DID server-side. The JWT `aud` is the service DID. Where `repo` goes depends on the method kind:
