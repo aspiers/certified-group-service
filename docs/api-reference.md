@@ -14,10 +14,10 @@ All endpoints (except `/health` and `/xrpc/_health`) require authentication via 
 
 How a client gets from a group it wants to act on to the service DID:
 
-1. **Find the group's service.** A group's DID document carries a `certified_group` service entry whose `serviceEndpoint` is the service URL. This is the only on-protocol link from a group to the service hosting it (`register` / `import` return the `groupDid`, not the service DID). This entry is the discovery anchor **regardless of how you call** — a direct caller reads it to learn the service URL, and a proxying PDS reads it to route the request.
+1. **Find the group's service.** A group's DID document carries a `certified_group` service entry whose `serviceEndpoint` is the service URL. This is the only on-protocol link from a group to the service hosting it (`register` / `import` return the `groupDid`, not the service DID). It is the discovery anchor: a direct caller reads it to learn the service URL and derive the service DID; legacy proxying (to the group DID) reads it to route. Migrated proxying instead targets the service DID and routes via the **service's** own document (`/.well-known/did.json`).
 2. **Derive the service DID** from that URL's host as above, and set it as `aud`.
 
-> **Service proxying note.** When calling through a PDS with the `atproto-proxy` header (`<did>#certified_group`), the PDS mints the service-auth JWT with `aud` set to the **DID in the proxy header**. The standard proxy target is the **group** DID, so proxied calls currently land on the legacy `aud` = group DID form (see below). Setting `aud` to the service DID is fully supported on **direct** calls today; see the integration guide for the proxy-side migration status.
+> **Service proxying note.** When calling through a PDS with the `atproto-proxy` header (`<did>#<service-id>`), the PDS mints the service-auth JWT with `aud` set to the **DID in the proxy header**. To get `aud` = the service DID, proxy to the service DID with the service's own service id: `certified_group_service` (resolved from the service's `did:web` document at `/.well-known/did.json`). Proxying to the **group** DID with `certified_group` instead yields the legacy `aud` = group DID form (see below). Either way the PDS delivers `aud` **bare** (`did:web:<host>`); the service also accepts the fragment-qualified `did:web:<host>#certified_group_service` for forward-compatibility, and rejects a different service's fragment.
 
 ## Targeting a group
 

@@ -186,18 +186,17 @@ const groupAgent = createGroupAgent(agent, groupDid)
 > for a complete implementation that restores an OAuth session and creates a proxied agent.
 
 > **Heads up — this proxy agent is on the legacy `aud` path (#27).** Because
-> `withProxy('certified_group', groupDid)` routes through the group's DID document,
+> `withProxy('certified_group', groupDid)` routes through the **group's** DID document,
 > the PDS mints the service-auth JWT with `aud` = the **group DID**. That is the
 > deprecated targeting form: it still works, but every response now carries an RFC
-> 8594 `Deprecation: true` header. The supported form names the group with an
-> explicit `repo` field and sets `aud` to the **service DID** — but a proxying PDS
-> mints `aud` from the proxy target, so the proxied path cannot reach `aud` = service
-> DID on the current release (see
-> [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27)).
-> Adding `repo` silences the warning **only for query methods** (where `repo` rides the
-> querystring, visible at auth time); for the JSON-body procedures in Step 3 it does
-> not, because the body is invisible when the service decides legacy-vs-new. Use direct
-> calls where full migration matters.
+> 8594 `Deprecation: true` header. To use the supported form under proxying, target the
+> **service** DID instead — `withProxy('certified_group_service', cgsServiceDid)` — so
+> the PDS mints `aud` = the service DID; also send an explicit `repo` to name the group.
+> See [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27).
+> (If you stay on the legacy proxy target, adding `repo` silences the warning **only for
+> query methods**, where `repo` rides the querystring and is visible at auth time; for
+> the JSON-body procedures in Step 3 it does not, because the body is invisible when the
+> service decides legacy-vs-new — those need the service-DID `aud`.)
 
 ## Step 3: Make authenticated requests
 
@@ -213,11 +212,14 @@ stock `@atproto/api` typed call already emits.
 
 > **Targeting a group (#27):** the group is identified by the `repo` field above,
 > and the supported form sets the JWT `aud` to the **service DID**. The older form —
-> group taken from the JWT `aud` with no `repo` — is **deprecated but still accepted**;
-> the proxy agent from Step 2 lands you on it (it mints `aud` = the group DID). Adding
-> `repo` clears the deprecation warning **only for query methods**; for the JSON-body
-> procedures below it does not, and a proxied call cannot set `aud` = service DID on the
-> current release — so these examples remain on the legacy path. See
+> group taken from the JWT `aud` with no `repo` — is **deprecated but still accepted**.
+> The proxy agent in Step 2 as written (`withProxy('certified_group', groupDid)`) lands
+> on the legacy path (it mints `aud` = the group DID), so the examples below carry a
+> `Deprecation` header; switch the proxy target to the service DID
+> (`withProxy('certified_group_service', cgsServiceDid)`) to put them on the supported
+> path. Note that adding `repo` alone clears the warning **only for query methods**; the
+> JSON-body procedures below need the service-DID `aud` (their body `repo` is invisible
+> when the service decides legacy-vs-new). See
 > [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27)
 > and `docs/design/aud-deprecation.md`.
 
@@ -699,15 +701,12 @@ the request body (auth runs before body parsing):
 
 In all cases, the reliable way off the deprecated path is to mint `aud` = the service DID.
 
-**Direct vs. proxied today.** The **direct-call** form above (you mint the JWT yourself
-with `aud` = the service DID) is fully migratable now. **Service proxying** is not yet:
-`withProxy('certified_group', groupDid)` makes the PDS mint `aud` = the **group DID** (the
-proxy target's DID), which is the legacy form, and there is no supported way on the current
-release to make a proxying PDS mint `aud` = the service DID. So a proxied query can drop the
-deprecation warning by adding `?repo=`, but a proxied call cannot fully reach `aud` = service
-DID yet — that depends on the group service publishing a resolvable `did:web` document, which
-is upcoming work ([#29](https://github.com/hypercerts-org/certified-group-service/issues/29)).
-Until then, use direct calls where full migration matters.
+**Direct vs. proxied.** Both forms can fully migrate:
+
+- **Direct calls** — you mint the JWT yourself with `aud` = the service DID and send `repo`. Fully supported and covered by the live e2e suite.
+- **Service proxying** — proxy to the **service** DID rather than the group DID: `agent.withProxy('certified_group_service', cgsServiceDid)`. The proxy id (`certified_group_service`) must match the service entry in the **service's** own DID document; the user's PDS resolves that document (published at `/.well-known/did.json` — [#29](https://github.com/hypercerts-org/certified-group-service/issues/29)), mints `aud` = the service DID, and forwards. The legacy `withProxy('certified_group', groupDid)` instead targets the **group** DID, whose document advertises the `certified_group` entry, so the PDS mints `aud` = the group DID — the deprecated form. (The two proxy ids differ by design: `certified_group` marks a group's document, `certified_group_service` the service's own — see `docs/design/aud-deprecation.md`.)
+
+One nuance for proxying. The supported `aud` is the service DID delivered **bare** (`did:web:<host>`) — which is what a PDS emits, because `getServiceAuth`'s `aud` is typed as a bare DID and the reference PDS strips the service-id fragment when proxying. The service also accepts the fragment-qualified form (`did:web:<host>#certified_group_service`) for forward-compatibility with the planned change where PDSs stop stripping it; a token carrying a _different_ service's fragment is rejected.
 
 The legacy form keeps working for now and will be removed in a later release once
 clients have migrated. See `docs/design/aud-deprecation.md` for the full design and

@@ -206,14 +206,25 @@ CGS-side choice:
 - **Legacy:** `withProxy('certified_group', groupDid)` → header `groupDid#certified_group`
   → PDS resolves the **group** DID (a `did:plc:*`, via the PLC directory), reads
   its `certified_group` entry, forwards, and mints `aud = groupDid`. This is the
-  deprecated form, and it is what stock proxying produces today.
-- **Migrated:** to get `aud = serviceDid` under proxying, the proxy target must be
-  the **service** DID → header `serviceDid#…` → PDS resolves `did:web:<host>`. A
-  `did:web` resolves by HTTP `GET https://<host>/.well-known/did.json` — so the
-  migrated proxied path requires CGS to **serve that document**. (That is separate
-  work; until it ships, full `aud = serviceDid` is reachable only on **direct**
-  calls, where the client writes `aud` and the verifier string-compares it — no
-  resolution, no served document needed.)
+  deprecated form, and it is what stock proxying produces by default.
+- **Migrated:** target the **service** DID →
+  `withProxy('certified_group_service', serviceDid)` → header
+  `serviceDid#certified_group_service` → PDS resolves `did:web:<host>`. A `did:web`
+  resolves by HTTP `GET https://<host>/.well-known/did.json`, which CGS now serves
+  (issue #29), so the PDS forwards and mints `aud = serviceDid`. The proxy id
+  `certified_group_service` must match the service entry in the **service's** own
+  document — distinct from the `certified_group` entry in a group's document (see
+  _Two-fragment convention_ in `src/did-document.ts`).
+
+What actually arrives in `aud`: the reference PDS **strips** the service-id
+fragment when proxying, so today CGS receives `aud = did:web:<host>` (bare) — the
+form the verifier has always accepted. The PDS is slated to stop stripping it
+(atproto.com/specs/xrpc#service-proxying), after which `aud` would arrive as
+`did:web:<host>#certified_group_service`; the verifier already accepts that exact
+fragment (and rejects a foreign one) for forward-compatibility. Direct calls are
+unaffected either way — the client writes the bare service DID into `aud` (a
+`getServiceAuth` `aud` is lexicon-typed `did`, which forbids a fragment) and the
+verifier string-compares it; no resolution, no served document needed.
 
 ### The resolution chain is a redundant round-trip — and why it must be
 
