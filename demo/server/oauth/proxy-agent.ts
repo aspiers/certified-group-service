@@ -19,6 +19,18 @@ export interface GroupServiceResult {
 }
 
 /**
+ * The service DID is the JWT audience for every direct group-service call. Fail
+ * fast with a clear message if it is unset, rather than letting getServiceAuth
+ * reject with an opaque "empty aud" error deep in the call.
+ */
+function requireServiceDid(): string {
+  if (!GROUP_SERVICE_DID) {
+    throw new Error('GROUP_SERVICE_DID is not configured (see demo/README.md)')
+  }
+  return GROUP_SERVICE_DID
+}
+
+/**
  * Call a group-service XRPC method directly, authenticated with a service-auth
  * JWT minted by the user's PDS (aud = the group service DID, lxm = the method).
  *
@@ -36,19 +48,18 @@ export async function callGroupService(
   nsid: string,
   opts: { method: 'GET' | 'POST'; params?: Record<string, string>; body?: Record<string, unknown> },
 ): Promise<GroupServiceResult> {
+  const aud = requireServiceDid()
   const oauthSession = await getOauthClient().restore(userDid)
   const agent = new Agent(oauthSession)
 
   // Prove the caller controls userDid; aud = service DID, lxm = the method.
-  const serviceAuth = await agent.com.atproto.server.getServiceAuth({
-    aud: GROUP_SERVICE_DID,
-    lxm: nsid,
-  })
+  const serviceAuth = await agent.com.atproto.server.getServiceAuth({ aud, lxm: nsid })
 
   // The group is always identified by `repo`: querystring for queries, body for
   // procedures (matches the group service's verifier, which reads repo before
-  // the body is parsed for queries).
-  const query = new URLSearchParams({ repo: groupDid, ...(opts.params ?? {}) }).toString()
+  // the body is parsed for queries). Force repo = groupDid LAST so a caller's
+  // params/body can never override the routing target.
+  const query = new URLSearchParams({ ...(opts.params ?? {}), repo: groupDid }).toString()
   const url = `${GROUP_SERVICE_URL.replace(/\/$/, '')}/xrpc/${nsid}?${query}`
 
   const headers: Record<string, string> = { Authorization: `Bearer ${serviceAuth.data.token}` }
@@ -57,7 +68,8 @@ export async function callGroupService(
     headers['Content-Type'] = 'application/json'
     // Include repo in the body too so procedure handlers that read input.body.repo
     // resolve the same group (the confused-deputy guard requires body == querystring).
-    requestBody = JSON.stringify({ repo: groupDid, ...(opts.body ?? {}) })
+    // repo is forced last so a caller-supplied repo cannot override groupDid.
+    requestBody = JSON.stringify({ ...(opts.body ?? {}), repo: groupDid })
   }
 
   const upstream = await fetch(url, { method: opts.method, headers, body: requestBody })
@@ -76,13 +88,11 @@ export async function uploadGroupBlob(
   bytes: Uint8Array,
   mimetype: string,
 ): Promise<GroupServiceResult> {
+  const aud = requireServiceDid()
   const oauthSession = await getOauthClient().restore(userDid)
   const agent = new Agent(oauthSession)
   const nsid = 'app.certified.group.repo.uploadBlob'
-  const serviceAuth = await agent.com.atproto.server.getServiceAuth({
-    aud: GROUP_SERVICE_DID,
-    lxm: nsid,
-  })
+  const serviceAuth = await agent.com.atproto.server.getServiceAuth({ aud, lxm: nsid })
   const url = `${GROUP_SERVICE_URL.replace(/\/$/, '')}/xrpc/${nsid}?repo=${encodeURIComponent(groupDid)}`
   const upstream = await fetch(url, {
     method: 'POST',

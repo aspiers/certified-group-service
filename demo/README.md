@@ -93,9 +93,9 @@ The demo deploys as its **own** Railway service (separate from the group service
 which uses the repo-root `railway.toml`):
 
 1. Create a new Railway service in the project, pointing at this repo.
-2. Build settings — the demo builds with the **repo root** as context (so it can
-   copy the repo-root `lexicons/` at build time; the custom lexicons are never
-   duplicated into `demo/`):
+2. Build settings — the demo builds with the **repo root** as context (the
+   service's Root Directory is the repo root, and `demo/Dockerfile` copies only
+   `demo/*`):
    - **Root Directory:** the repo root (default / unset).
    - **Config-as-code path:** [`railway-demo.toml`](../railway-demo.toml) — set
      this explicitly, since the repo root already has `railway.toml` for the
