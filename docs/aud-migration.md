@@ -74,8 +74,9 @@ DID (and, for queries, send `repo` in the same call — never one without the ot
 
 Both can fully migrate.
 
-- **Direct calls** — you mint the JWT yourself (`getServiceAuth({ aud: cgsServiceDid, lxm })`)
-  and send `repo`. Fully supported and covered by the live e2e suite.
+- **Direct calls** — you obtain the token from the user's PDS yourself
+  (`getServiceAuth({ aud: cgsServiceDid, lxm })` — the PDS signs it), then present it
+  on the request and send `repo`. Fully supported and covered by the live e2e suite.
 - **Service proxying** — proxy to the **service** DID:
   `agent.withProxy('certified_group_service', cgsServiceDid)`. The proxy id
   (`certified_group_service`) must match the service entry in the **service's** own
