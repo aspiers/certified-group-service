@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@atproto/api": "^0.19.3",
+    "@atproto/lexicon": "^0.6.2",
     "@atproto/oauth-client-node": "^0.3.17",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
     "express": "^4.21.0",
     "express-session": "^1.18.0",
     "multer": "^1.4.5-lts.1"
