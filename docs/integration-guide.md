@@ -46,7 +46,7 @@ The group service uses **custom NSIDs** for record operations instead of the sta
 
 **Why not `com.atproto.repo.*`?** The recommended integration pattern uses service proxying: your app sends requests to the user's PDS with an `atproto-proxy` header, and the PDS forwards them to the group service. When the PDS sees a `com.atproto.repo.createRecord` call, it handles it itself (writing to its own repo) — it has no reason to forward it anywhere. Custom NSIDs like `app.certified.group.repo.createRecord` are unrecognized by the PDS, so it looks up the target service in the group's DID document and proxies the request there. **This is the only way record operations can reach the group service through the proxy pattern.**
 
-> **Do not use `com.atproto.repo.*` NSIDs.** They will never reach the group service when proxying through a PDS. The group service does accept them for backwards compatibility on direct calls, but direct calls are not the recommended pattern and the standard NSIDs may be removed in the future.
+> **Do not use `com.atproto.repo.*` NSIDs.** They will never reach the group service when proxying through a PDS. The group service does accept them for backwards compatibility on non-proxied calls, but non-proxied calls are not the recommended pattern and the standard NSIDs may be removed in the future.
 
 The custom lexicons are JSON files shipped with the group service under `lexicons/app/certified/`. You must load them into your proxy agent so the `@atproto/api` client recognizes them. See Step 2 below.
 
@@ -86,7 +86,7 @@ async function registerGroup(agent: AtpAgent, handle: string, ownerDid: string, 
 - `ownerDid` — the DID of the user who will own this group. Must match the JWT's `iss` claim. They're immediately seeded as the owner.
 - `email` — optional recovery email for the group account. If omitted, a placeholder is generated. Providing a real email enables the forgot-password flow for credible exit.
 
-Registration (and import, below) are called **directly**, not via proxy. All subsequent calls go through the proxy agent.
+Registration (and import, below) are **non-proxied** calls (the client calls the group service itself), not proxied through the PDS. All subsequent calls go through the proxy agent.
 
 ## Step 1b (alternative): Import an existing account
 
@@ -265,7 +265,7 @@ import { AtpAgent } from '@atproto/api'
 const agent = new AtpAgent({ service: userPdsUrl })
 // ... configure agent with user's OAuth session
 
-// 2. Register a group (direct call — proves DID control via service auth)
+// 2. Register a group (non-proxied call — proves DID control via service auth)
 const { groupDid } = await registerGroup(agent, 'our-team', currentUserDid)
 
 // 3. Set up the proxy agent with custom lexicons
@@ -549,20 +549,20 @@ All error responses follow this shape:
 
 ## Complete endpoint reference
 
-| NSID                                    | Type      | Required role | Description                                     |
-| --------------------------------------- | --------- | ------------- | ----------------------------------------------- |
-| `app.certified.group.register`          | procedure | service auth  | Register a new group (direct call, not proxied) |
-| `app.certified.group.import`            | procedure | service auth  | Import an existing account as a group (direct)  |
-| `app.certified.group.repo.createRecord` | procedure | member        | Create a record                                 |
-| `app.certified.group.repo.putRecord`    | procedure | member/admin  | Update or create a record                       |
-| `app.certified.group.repo.deleteRecord` | procedure | member/admin  | Delete a record                                 |
-| `app.certified.group.repo.uploadBlob`   | procedure | member        | Upload a blob (max 5 MB)                        |
-| `app.certified.group.member.add`        | procedure | admin         | Add a member                                    |
-| `app.certified.group.member.remove`     | procedure | admin/self    | Remove a member                                 |
-| `app.certified.group.member.list`       | query     | member        | List members with pagination                    |
-| `app.certified.group.role.set`          | procedure | owner         | Change a member's role                          |
-| `app.certified.group.destroy`           | procedure | owner         | Remove the group from the service               |
-| `app.certified.group.audit.query`       | query     | admin         | Query the audit log                             |
+| NSID                                    | Type      | Required role | Description                                    |
+| --------------------------------------- | --------- | ------------- | ---------------------------------------------- |
+| `app.certified.group.register`          | procedure | service auth  | Register a new group (non-proxied call)        |
+| `app.certified.group.import`            | procedure | service auth  | Import an existing account as a group (direct) |
+| `app.certified.group.repo.createRecord` | procedure | member        | Create a record                                |
+| `app.certified.group.repo.putRecord`    | procedure | member/admin  | Update or create a record                      |
+| `app.certified.group.repo.deleteRecord` | procedure | member/admin  | Delete a record                                |
+| `app.certified.group.repo.uploadBlob`   | procedure | member        | Upload a blob (max 5 MB)                       |
+| `app.certified.group.member.add`        | procedure | admin         | Add a member                                   |
+| `app.certified.group.member.remove`     | procedure | admin/self    | Remove a member                                |
+| `app.certified.group.member.list`       | query     | member        | List members with pagination                   |
+| `app.certified.group.role.set`          | procedure | owner         | Change a member's role                         |
+| `app.certified.group.destroy`           | procedure | owner         | Remove the group from the service              |
+| `app.certified.group.audit.query`       | query     | admin         | Query the audit log                            |
 
 ## Role quick reference
 
@@ -595,11 +595,11 @@ The [demo app](../demo/) is a complete working example with:
 
 For the full API specification, see the [API Reference](./api-reference.md).
 
-## Direct calls (advanced)
+## Non-proxied calls (advanced)
 
-If you can't use service proxying (e.g. your environment doesn't support it), you can
-call the group service directly by obtaining a JWT via `com.atproto.server.getServiceAuth`
-and making requests with `Authorization: Bearer <jwt>`. Use the custom
+If you can't use service proxying (e.g. your environment doesn't support it), the
+client can call the group service itself: fetch a service-auth token via
+`com.atproto.server.getServiceAuth` and make requests with `Authorization: Bearer <jwt>`. Use the custom
 `app.certified.group.repo.*` NSIDs — the `lxm` field in the JWT must match the NSID
 you're calling.
 

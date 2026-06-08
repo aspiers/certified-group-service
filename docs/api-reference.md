@@ -8,16 +8,23 @@ All endpoints (except `/health` and `/xrpc/_health`) require authentication via 
 - `jti` — a unique nonce (each token can only be used once)
 - `exp` — expiration timestamp
 
+## Two ways to send a request
+
+A client reaches the service by one of two routes, referred to throughout this reference:
+
+- **Non-proxied call** — the client fetches a service-auth token from the user's PDS (`com.atproto.server.getServiceAuth`), then sends the XRPC request to the group service itself with that token in the `Authorization` header. The client chooses the `aud` it requests.
+- **Proxied call** — the client sends the request to the user's PDS with an `atproto-proxy` header; the PDS forwards it to the group service. The PDS chooses `aud` (the DID being proxied to), not the client. This is the standard AT Protocol pattern.
+
+The user's PDS signs the token in **both** cases; the routes differ in who chooses `aud` and who sends the final request to the group service.
+
 ## Determining the service DID
 
-`aud` is the **service DID**. A client discovers it from the group, not by assuming the service URL:
+`aud` is the **service DID**. A client discovers it from the group, rather than assuming a service URL:
 
-1. **Find the group's service.** A group's DID document (resolve the `groupDid`) carries a `certified_group` service entry whose `serviceEndpoint` is the service URL. This is the only on-protocol link from a group to the service hosting it (`register` / `import` return the `groupDid`, not the service DID), and the first step of the resolution chain — a direct caller reads it to learn the service URL; legacy proxying (to the group DID) reads it to route.
+1. **Find the group's service.** A group's DID document (resolve the `groupDid`) carries a `certified_group` service entry whose `serviceEndpoint` is the service URL. This is the only on-protocol link from a group to the service hosting it (`register` / `import` return the `groupDid`, not the service DID), and the first step of resolution. A non-proxied caller reads this entry to learn the service URL; a proxied call to the group DID has its PDS read it to route the request.
 2. **Derive the service DID** from that URL's host: a `did:web` formed by stripping the scheme — `https://group-service.example.com` → `did:web:group-service.example.com`. This transform is pure string manipulation (no further lookup); set the result as `aud`.
 
-(Migrated proxying targets the service DID and routes via the **service's** own document at `/.well-known/did.json`.)
-
-> **Service proxying note.** When calling through a PDS with the `atproto-proxy` header (`<did>#<service-id>`), the PDS mints the service-auth JWT with `aud` set to the **DID in the proxy header**. To get `aud` = the service DID, proxy to the service DID with the service's own service id: `certified_group_service` (resolved from the service's `did:web` document at `/.well-known/did.json`). Proxying to the **group** DID with `certified_group` instead yields the legacy `aud` = group DID form (see below). Either way the PDS delivers `aud` **bare** (`did:web:<host>`); the service also accepts the fragment-qualified `did:web:<host>#certified_group_service` for forward-compatibility, and rejects a different service's fragment.
+> **`aud` on a proxied call.** The PDS sets `aud` to the **DID it proxies to** (the DID in the `atproto-proxy` header, `<did>#<service-id>`). To get `aud` = the service DID, proxy to the service DID with the service's own service id, `certified_group_service`, which the PDS resolves from the service's `did:web` document at `/.well-known/did.json`. Proxying to the **group** DID with the `certified_group` id instead yields the legacy `aud` = group DID form (see [Legacy `aud` = group DID form](#legacy-aud--group-did-form-deprecated)). Either way the PDS delivers `aud` **bare** (`did:web:<host>`); the service also accepts the fragment-qualified `did:web:<host>#certified_group_service` for forward-compatibility, and rejects a different service's fragment.
 
 ## Targeting a group
 

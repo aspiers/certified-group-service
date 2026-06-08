@@ -73,14 +73,22 @@ but not the request body (auth runs before body parsing), so the rule differs by
 In all cases, the reliable way off the deprecated path is to mint `aud` = the service
 DID (and, for queries, send `repo` in the same call — never one without the other).
 
-## Direct calls vs. service proxying
+## Non-proxied vs. proxied calls
 
-Both can fully migrate.
+A client reaches the service one of two ways (the user's PDS signs the token in
+**both**; they differ in who chooses `aud` and who sends the final request):
 
-- **Direct calls** — you obtain the token from the user's PDS yourself
-  (`getServiceAuth({ aud: cgsServiceDid, lxm })` — the PDS signs it), then present it
-  on the request and send `repo`. Fully supported and covered by the live e2e suite.
-- **Service proxying** — proxy to the **service** DID:
+- **Non-proxied call** — the client fetches a service-auth token from the user's
+  PDS (`getServiceAuth`) and sends the request to the group service itself.
+- **Proxied call** — the client sends the request to its PDS with an
+  `atproto-proxy` header; the PDS forwards it. The standard AT Protocol pattern.
+
+Both can fully migrate:
+
+- **Non-proxied** — fetch the token with `getServiceAuth({ aud: cgsServiceDid, lxm })`,
+  then send the request to the group service with that token and `repo`. Fully
+  supported and covered by the live e2e suite.
+- **Proxied** — proxy to the **service** DID:
   `agent.withProxy('certified_group_service', cgsServiceDid)`. The proxy id
   (`certified_group_service`) must match the service entry in the **service's** own
   DID document; the user's PDS resolves that document (the service publishes it at

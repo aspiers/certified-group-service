@@ -246,8 +246,8 @@ form the verifier has always accepted. The PDS is slated to stop stripping it
 ([AT Protocol XRPC spec — service proxying](https://atproto.com/specs/xrpc#service-proxying)),
 after which `aud` would arrive as
 `did:web:<host>#certified_group_service`; the verifier already accepts that exact
-fragment (and rejects a foreign one) for forward-compatibility. Direct calls are
-unaffected either way — the client writes the bare service DID into `aud` (a
+fragment (and rejects a foreign one) for forward-compatibility. Non-proxied calls
+are unaffected either way — the client requests the bare service DID as `aud` (a
 `getServiceAuth` `aud` is lexicon-typed `did`, which forbids a fragment) and the
 verifier string-compares it; no resolution, no served document needed.
 
@@ -294,10 +294,10 @@ time (the genesis doc), before CGS inserts the `certified_group` service record,
 an immediate resolution can miss the entry. Tracked as `HYPER-453`; a bug to fix,
 not a pattern to follow.)
 
-What legitimately shortens the chain is the **method type**, not skipping
-discovery: direct calls don't proxy, so they skip hops B→C (they assert `aud`
-without resolving the service document). The full five-hop chain is the
-proxied-from-a-bare-`groupDid` case.
+What legitimately shortens the chain is the **call route**, not skipping
+discovery: a non-proxied call doesn't proxy, so it skips hops B→C (it requests
+`aud` directly without the PDS resolving the service document). The full five-hop
+chain is the proxied-from-a-bare-`groupDid` case.
 
 ## Security: `repo` is unsigned (a deliberate reduction to atproto parity)
 
