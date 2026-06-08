@@ -193,21 +193,31 @@ app dev can call **without thinking about CGS at all**, which is the bar.
 
 ## Service-DID resolution under proxying
 
+### The two ways a client calls CGS
+
+Throughout this section, a client reaches CGS by one of two routes, referred to
+below as the **direct** and **proxied** paths:
+
+- **Direct call** — the client obtains a service-auth token from the user's PDS
+  (via `com.atproto.server.getServiceAuth`) and sends the XRPC request to CGS
+  itself, with that token in the `Authorization` header.
+- **Service proxying** — the client sends the request to the user's PDS with an
+  `atproto-proxy` header; the PDS mints the token and forwards the request to CGS
+  on the client's behalf. This is the standard AT Protocol pattern.
+
+In both cases the user's PDS signs the token; what differs (next) is who chooses
+the `aud` claim.
+
+### Deriving the service DID
+
 The corrected `aud` is the **service DID**, a `did:web` whose host is the service's
 own URL (`config.serviceDid` = `did:web:${new URL(serviceUrl).hostname}`,
 `src/config.ts`). The server knows its own URL, so for it this is pure string
 construction. A _client_, by contrast, must first discover the service URL from the
 group's DID document (the `certified_group` entry) and only then derive the
-`did:web` — the derivation is string-only, but it is preceded by that lookup. And
-under **standard AT Protocol service proxying** the picture is subtler still, worth
-recording because it is easy to re-derive wrongly.
+`did:web` — the derivation is string-only, but it is preceded by that lookup.
 
 ### Direct and proxied calls set `aud` differently
-
-A call reaches CGS one of two ways — the client obtains a token and calls CGS
-**directly**, or it routes through the user's PDS via **service proxying** — and
-the two obtain `aud` by different mechanisms. (The user's PDS signs the token in
-both cases; what differs is who chooses `aud`.)
 
 On the **direct** path the client calls `getServiceAuth({ aud, lxm })` itself and
 chooses `aud` outright (it sets the service DID). On the **proxied** path the
