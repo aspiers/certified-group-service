@@ -298,19 +298,31 @@ non-RPC method, or an `aud` for a different service.
    role still decides whose records may be touched (a member-issued key can only
    mutate records that member authored; an admin-issued key can touch any).
 
-### GOTCHA: API-key writes need `repo` on the QUERYSTRING — even for procedures
+### GOTCHA: API-key requests need `repo` on the QUERYSTRING — even for write procedures
 
-This is the single most common mistake on the key path and differs from the JWT
-path. API-key auth resolves and authenticates against the group **before the
-JSON body is parsed**, so a body `repo` is invisible at auth time. Therefore:
+This is the single most common mistake on the key path, and it differs from the
+JWT path. The reason is structural, not cosmetic: an API key is verified
+**against its own group's database** (the group DID is hashed to locate the
+per-group store, then the key is checked there), so the group must be known
+**before** the key can be authenticated. Group resolution is therefore a
+_precondition_ of auth, and the auth layer runs before the JSON body is parsed —
+so it reads `repo` from the **querystring only**.
 
-- **Always** put `repo` on the **querystring** (`?repo=<handle-or-did>`) for an
-  API-key request — including record-write **procedures**, where the JWT path
-  would carry `repo` in the body.
-- Omitting the querystring `repo` → `401 Missing repo for API-key request`.
-- If the body _also_ carries `repo`, it must resolve to the **same** group as the
-  querystring, or the request is rejected (`400`) — the key was authenticated
-  against the querystring group and can't be redirected.
+Contrast with the JWT path: a JWT verifies by _signature_, independent of which
+group, so the group can be resolved later, in the handler, from the **body**
+`repo`. That's why a JWT `createRecord` can put `repo` only in the body — but an
+API-key `createRecord` cannot.
+
+Concretely, for **any** API-key request (queries _and_ write procedures):
+
+- **Required:** `repo` on the **querystring** (`?repo=<handle-or-did>`).
+- Omitting it → `401 Missing repo for API-key request` (thrown at auth, before
+  the handler runs).
+- A body `repo` is **not forbidden, just insufficient on its own** — if you send
+  one (e.g. because the lexicon/standard client includes it), it must resolve to
+  the **same** group as the querystring, or the request is rejected (`400`). The
+  key was authenticated against the querystring group and can't be redirected to
+  another via the body.
 
 Full grammar, examples, and the scope registry:
 [Authenticating with an API key](https://github.com/hypercerts-org/certified-group-service/blob/main/docs/api-reference.md#authenticating-with-an-api-key)
