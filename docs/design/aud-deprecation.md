@@ -230,7 +230,7 @@ verifier string-compares it; no resolution, no served document needed.
 
 Starting from nothing but a `groupDid`, a fully-migrated proxied call traverses:
 
-```
+```text
 groupDid
   → resolve group DID doc → certified_group entry → service endpoint URL   (A: discovery)
   → derive did:web:<host> from that URL                                    (B)
