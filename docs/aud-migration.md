@@ -25,15 +25,18 @@ A request must be **fully** one form or the other; a half-migrated mix is reject
 
 ## Finding the service DID
 
-`aud` must be the **service DID**, a `did:web` derived from the service URL — strip
-the scheme, use the host: `https://group-service.example.com` →
-`did:web:group-service.example.com`. No lookup is needed to build it.
+`aud` must be the **service DID**. You discover which service hosts a group, and
+thus its DID, from the group itself — do not assume the service URL out of thin air:
 
-If you only hold a `groupDid` and need to discover its service, read the
-`certified_group` service entry in the **group's** DID document — its
-`serviceEndpoint` is the service URL, from whose host you derive the service DID.
-That entry is the sole on-protocol link from a group to its service, and is read on
-both the direct and proxied paths.
+1. **Resolve the group's DID document** (you have the `groupDid`) and read its
+   `certified_group` service entry. Its `serviceEndpoint` is the service URL. This
+   entry is the sole on-protocol link from a group to its service — the first step
+   of the chain, and what a proxying PDS reads to route.
+2. **Derive the service DID** from that URL's host: a `did:web` formed by stripping
+   the scheme — `https://group-service.example.com` → `did:web:group-service.example.com`.
+   That final transform needs no further lookup; the lookup is step 1.
+
+Set the result as `aud`.
 
 ## Where `repo` goes
 

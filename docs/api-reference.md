@@ -10,12 +10,12 @@ All endpoints (except `/health` and `/xrpc/_health`) require authentication via 
 
 ## Determining the service DID
 
-`aud` is the **service DID**, and the service DID is a `did:web` derived directly from the service URL: strip the scheme and use the host — `https://group-service.example.com` → `did:web:group-service.example.com`. No network lookup is needed to construct it.
+`aud` is the **service DID**. A client discovers it from the group, not by assuming the service URL:
 
-How a client gets from a group it wants to act on to the service DID:
+1. **Find the group's service.** A group's DID document (resolve the `groupDid`) carries a `certified_group` service entry whose `serviceEndpoint` is the service URL. This is the only on-protocol link from a group to the service hosting it (`register` / `import` return the `groupDid`, not the service DID), and the first step of the resolution chain — a direct caller reads it to learn the service URL; legacy proxying (to the group DID) reads it to route.
+2. **Derive the service DID** from that URL's host: a `did:web` formed by stripping the scheme — `https://group-service.example.com` → `did:web:group-service.example.com`. This transform is pure string manipulation (no further lookup); set the result as `aud`.
 
-1. **Find the group's service.** A group's DID document carries a `certified_group` service entry whose `serviceEndpoint` is the service URL. This is the only on-protocol link from a group to the service hosting it (`register` / `import` return the `groupDid`, not the service DID). It is the discovery anchor: a direct caller reads it to learn the service URL and derive the service DID; legacy proxying (to the group DID) reads it to route. Migrated proxying instead targets the service DID and routes via the **service's** own document (`/.well-known/did.json`).
-2. **Derive the service DID** from that URL's host as above, and set it as `aud`.
+(Migrated proxying targets the service DID and routes via the **service's** own document at `/.well-known/did.json`.)
 
 > **Service proxying note.** When calling through a PDS with the `atproto-proxy` header (`<did>#<service-id>`), the PDS mints the service-auth JWT with `aud` set to the **DID in the proxy header**. To get `aud` = the service DID, proxy to the service DID with the service's own service id: `certified_group_service` (resolved from the service's `did:web` document at `/.well-known/did.json`). Proxying to the **group** DID with `certified_group` instead yields the legacy `aud` = group DID form (see below). Either way the PDS delivers `aud` **bare** (`did:web:<host>`); the service also accepts the fragment-qualified `did:web:<host>#certified_group_service` for forward-compatibility, and rejects a different service's fragment.
 

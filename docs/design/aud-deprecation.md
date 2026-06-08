@@ -193,12 +193,14 @@ app dev can call **without thinking about CGS at all**, which is the bar.
 
 ## Service-DID resolution under proxying
 
-The corrected `aud` is the **service DID**, a `did:web` derived from the service
-URL (`config.serviceDid` = `did:web:${new URL(serviceUrl).hostname}`,
-`src/config.ts`). A client building the JWT itself just constructs that string —
-no lookup. But under **standard AT Protocol service proxying** the picture is
-subtler, and the subtlety is worth recording because it is easy to re-derive
-wrongly.
+The corrected `aud` is the **service DID**, a `did:web` whose host is the service's
+own URL (`config.serviceDid` = `did:web:${new URL(serviceUrl).hostname}`,
+`src/config.ts`). The server knows its own URL, so for it this is pure string
+construction. A _client_, by contrast, must first discover the service URL from the
+group's DID document (the `certified_group` entry) and only then derive the
+`did:web` — the derivation is string-only, but it is preceded by that lookup. And
+under **standard AT Protocol service proxying** the picture is subtler still, worth
+recording because it is easy to re-derive wrongly.
 
 ### The two paths mint `aud` differently
 
