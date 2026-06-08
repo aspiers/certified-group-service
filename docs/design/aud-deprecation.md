@@ -202,9 +202,17 @@ group's DID document (the `certified_group` entry) and only then derive the
 under **standard AT Protocol service proxying** the picture is subtler still, worth
 recording because it is easy to re-derive wrongly.
 
-### The two paths mint `aud` differently
+### Direct and proxied calls set `aud` differently
 
-A proxying PDS sets the JWT `aud` to **the DID in the `atproto-proxy` header**
+A call reaches CGS one of two ways — the client obtains a token and calls CGS
+**directly**, or it routes through the user's PDS via **service proxying** — and
+the two obtain `aud` by different mechanisms. (The user's PDS signs the token in
+both cases; what differs is who chooses `aud`.)
+
+On the **direct** path the client calls `getServiceAuth({ aud, lxm })` itself and
+chooses `aud` outright (it sets the service DID). On the **proxied** path the
+client never names `aud`: a proxying PDS sets the JWT `aud` to **the DID in the
+`atproto-proxy` header**
 (`<did>#<fragment>`), then resolves that DID's document and forwards to its
 service endpoint. So `aud` is decided by **which DID you proxy to**, not by any
 CGS-side choice:
@@ -225,7 +233,8 @@ CGS-side choice:
 What actually arrives in `aud`: the reference PDS **strips** the service-id
 fragment when proxying, so today CGS receives `aud = did:web:<host>` (bare) — the
 form the verifier has always accepted. The PDS is slated to stop stripping it
-(atproto.com/specs/xrpc#service-proxying), after which `aud` would arrive as
+([AT Protocol XRPC spec — service proxying](https://atproto.com/specs/xrpc#service-proxying)),
+after which `aud` would arrive as
 `did:web:<host>#certified_group_service`; the verifier already accepts that exact
 fragment (and rejects a foreign one) for forward-compatibility. Direct calls are
 unaffected either way — the client writes the bare service DID into `aud` (a
