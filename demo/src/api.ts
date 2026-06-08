@@ -48,6 +48,15 @@ export const logout = () =>
 export const getMe = () =>
   request<{ did: string; handle: string }>('/me')
 
+/**
+ * Resolve a DID-or-handle to a DID, so fields can accept either. A value that
+ * already looks like a DID is returned as-is; a handle is resolved server-side.
+ */
+export const resolveIdentifier = (identifier: string) =>
+  request<{ did: string; handle: string | null }>(
+    `/resolve?identifier=${encodeURIComponent(identifier.trim())}`,
+  )
+
 // Register (requires auth — owner DID comes from session, service auth proves DID control)
 export const registerGroup = (body: { handle: string }) =>
   request<{ groupDid: string; handle: string }>('/register', { method: 'POST', body: JSON.stringify(body) })

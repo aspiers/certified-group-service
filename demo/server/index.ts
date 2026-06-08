@@ -7,6 +7,7 @@ import cors from 'cors'
 import authRoutes from './routes/auth.js'
 import proxyRoutes from './routes/proxy.js'
 import uploadRoutes from './routes/upload.js'
+import resolveRoutes from './routes/resolve.js'
 import registerRoutes from './routes/register.js'
 import keysRoutes from './routes/keys.js'
 
@@ -65,6 +66,7 @@ app.use('/api', authRoutes)
 app.use('/api/proxy', proxyRoutes)
 app.use('/api/register', registerRoutes)
 app.use('/api/keys', keysRoutes)
+app.use('/api/resolve', resolveRoutes)
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
