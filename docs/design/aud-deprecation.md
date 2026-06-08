@@ -215,7 +215,7 @@ CGS-side choice:
   `withProxy('certified_group_service', serviceDid)` → header
   `serviceDid#certified_group_service` → PDS resolves `did:web:<host>`. A `did:web`
   resolves by HTTP `GET https://<host>/.well-known/did.json`, which CGS now serves
-  (issue #29), so the PDS forwards and mints `aud = serviceDid`. The proxy id
+  (closing #29), so the PDS forwards and mints `aud = serviceDid`. The proxy id
   `certified_group_service` must match the service entry in the **service's** own
   document — distinct from the `certified_group` entry in a group's document (see
   _Two-fragment convention_ in `src/did-document.ts`).
@@ -262,13 +262,20 @@ layer seam**, not avoidable cleverness:
 The endpoint URL appears in two DID documents precisely because these two layers
 do not share state.
 
-**The round-trip is worst-case, not per-call.** Hop A only exists when the client
-starts from a bare `groupDid` with no other knowledge. In practice an app is
-configured with the service URL out-of-band (the integration guide's
-`GROUP_SERVICE_DID` constant), so it derives the service DID directly and skips
-hop A entirely. And direct calls skip hops B→C as well — they neither discover
-nor resolve, they just assert `aud`. The full five-hop chain is the maximal case
-(on-protocol discovery from nothing, under proxying), not the common one.
+**The round-trip is the intended path, not an inefficiency to route around.**
+Resolving the group's DID document to discover its service (hop A) is how a client
+is _supposed_ to find which service hosts a group — that on-protocol link is the
+whole point of the chain. A client should not hardcode the service URL to skip it:
+doing so couples the client to one deployment and breaks the moment a group is
+hosted elsewhere. (Our first client app does hardcode it, but only as a workaround
+for a specific bug — the PDS caches the group's DID document at account-creation
+time, before CGS inserts the `certified_group` service record, so an immediate
+resolution can miss the entry. That is a bug to fix, not a pattern to follow.)
+
+What legitimately shortens the chain is the **method type**, not skipping
+discovery: direct calls don't proxy, so they skip hops B→C (they assert `aud`
+without resolving the service document). The full five-hop chain is the
+proxied-from-a-bare-`groupDid` case.
 
 ## Security: `repo` is unsigned (a deliberate reduction to atproto parity)
 

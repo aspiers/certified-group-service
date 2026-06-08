@@ -80,9 +80,8 @@ Both can fully migrate.
 - **Service proxying** — proxy to the **service** DID:
   `agent.withProxy('certified_group_service', cgsServiceDid)`. The proxy id
   (`certified_group_service`) must match the service entry in the **service's** own
-  DID document; the user's PDS resolves that document (published at
-  `/.well-known/did.json` — [#29](https://github.com/hypercerts-org/certified-group-service/issues/29)),
-  mints `aud` = the service DID, and forwards. The legacy
+  DID document; the user's PDS resolves that document (the service publishes it at
+  `/.well-known/did.json`), mints `aud` = the service DID, and forwards. The legacy
   `withProxy('certified_group', groupDid)` targets the **group** DID instead, whose
   document advertises the `certified_group` entry, so the PDS mints `aud` = the group
   DID — the deprecated form.
