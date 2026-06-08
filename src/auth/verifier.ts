@@ -24,13 +24,20 @@ function errMessage(err: unknown): string {
  * Decode the header+payload of a JWT without verifying its signature, for
  * logging only. Returns null on malformed input. The signature segment is
  * deliberately dropped — it's a bearer credential and must never be logged.
+ *
+ * Requires exactly three dot-separated parts and strict base64url segments:
+ * `Buffer.from(_, 'base64url')` is permissive (it ignores stray characters),
+ * so the charset is validated first to reject malformed tokens rather than
+ * log a misleadingly-decoded payload.
  */
 function decodeJwtForLog(jwt: string): { header: unknown; payload: unknown } | null {
   const parts = jwt.split('.')
-  if (parts.length < 2) return null
+  if (parts.length !== 3) return null
   try {
-    const decode = (s: string): unknown =>
-      JSON.parse(Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'))
+    const decode = (s: string): unknown => {
+      if (!/^[A-Za-z0-9_-]+$/.test(s)) throw new Error('not base64url')
+      return JSON.parse(Buffer.from(s, 'base64url').toString('utf8'))
+    }
     return { header: decode(parts[0]), payload: decode(parts[1]) }
   } catch {
     return null
