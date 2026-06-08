@@ -1,4 +1,4 @@
-import { ScopesSet, RpcPermission, RepoPermission } from '@atproto/oauth-scopes'
+import { ScopesSet, RpcPermission, RepoPermission, BlobPermission } from '@atproto/oauth-scopes'
 import type { RepoAction } from '@atproto/oauth-scopes'
 import type { Operation } from '../rbac/permissions.js'
 
@@ -110,6 +110,18 @@ export function repoScopesCover(
 }
 
 /**
+ * Does a granted scope set cover a blob upload of the given MIME type?
+ * `uploadBlob` is gated by a `blob:<accept>` scope (e.g. an all-types or
+ * `blob:image/*` accept). CGS proxies the upload to the group's PDS as the group
+ * account, so it consumes the group's blob store and is authenticated/scoped
+ * even though raw atproto blob upload is low-stakes until a record references it.
+ */
+export function blobScopesCover(grantedScopes: string[], mime: string): boolean {
+  const granted = ScopesSet.fromString(grantedScopes.join(' '))
+  return granted.matches('blob', { mime })
+}
+
+/**
  * Validate that every scope string in a list parses as a known scope. Used at
  * key-creation time to reject garbage scopes before they are stored. Returns the
  * first invalid scope, or null if all are valid.
@@ -117,9 +129,11 @@ export function repoScopesCover(
 export function firstInvalidScope(scopes: string[]): string | null {
   for (const scope of scopes) {
     // Valid if it parses as one of the scope kinds we consume: `rpc:` (service
-    // methods) or `repo:` (PDS-repo writes).
+    // methods), `repo:` (PDS-repo writes), or `blob:` (blob uploads).
     const valid =
-      RpcPermission.fromString(scope) !== null || RepoPermission.fromString(scope) !== null
+      RpcPermission.fromString(scope) !== null ||
+      RepoPermission.fromString(scope) !== null ||
+      BlobPermission.fromString(scope) !== null
     if (!valid) return scope
   }
   return null
@@ -144,8 +158,9 @@ export type ScopeCanonicalization =
  */
 export function canonicalizeScope(scope: string, serviceDid: string): ScopeCanonicalization {
   if (scope.startsWith('repo:')) return canonicalizeRepoScope(scope)
+  if (scope.startsWith('blob:')) return canonicalizeBlobScope(scope)
   if (scope.startsWith('rpc:')) return canonicalizeRpcScope(scope, serviceDid)
-  return { ok: false, scope, reason: 'unsupported scope kind (expected rpc: or repo:)' }
+  return { ok: false, scope, reason: 'unsupported scope kind (expected rpc:, repo: or blob:)' }
 }
 
 function canonicalizeRpcScope(scope: string, serviceDid: string): ScopeCanonicalization {
@@ -178,6 +193,13 @@ function canonicalizeRepoScope(scope: string): ScopeCanonicalization {
   // action set) and matches what the gate computes.
   const parsed = RepoPermission.fromString(scope)
   if (parsed === null) return { ok: false, scope, reason: 'unparseable repo: scope' }
+  return { ok: true, scope: parsed.toString() }
+}
+
+function canonicalizeBlobScope(scope: string): ScopeCanonicalization {
+  // No aud — validate the `blob:<accept>` MIME form and re-emit normalised.
+  const parsed = BlobPermission.fromString(scope)
+  if (parsed === null) return { ok: false, scope, reason: 'unparseable blob: scope' }
   return { ok: true, scope: parsed.toString() }
 }
 

@@ -10,6 +10,7 @@ import {
   canonicalizeScopes,
   repoActionForOperation,
   repoScopesCover,
+  blobScopesCover,
 } from '../src/auth/scopes.js'
 
 const SERVICE_DID = 'did:web:groups.example.com'
@@ -204,12 +205,43 @@ describe('canonicalizeScope — repo: scopes', () => {
   })
 })
 
-describe('firstInvalidScope — both kinds', () => {
-  it('accepts rpc: and repo: scopes', () => {
-    expect(firstInvalidScope([MEMBER_LIST_SCOPE, REPO_CREATE])).toBeNull()
+describe('firstInvalidScope — all kinds', () => {
+  it('accepts rpc:, repo: and blob: scopes', () => {
+    expect(firstInvalidScope([MEMBER_LIST_SCOPE, REPO_CREATE, 'blob:image/*'])).toBeNull()
   })
 
   it('rejects an unsupported kind', () => {
-    expect(firstInvalidScope([REPO_CREATE, 'blob:*'])).toBe('blob:*')
+    // `account:` is a real atproto scope kind but one CGS does not consume.
+    expect(firstInvalidScope([REPO_CREATE, 'account:email?action=read'])).toBe(
+      'account:email?action=read',
+    )
+  })
+})
+
+describe('blobScopesCover', () => {
+  it('grants when a blob: scope covers the MIME type', () => {
+    expect(blobScopesCover(['blob:image/*'], 'image/png')).toBe(true)
+    expect(blobScopesCover(['blob:*/*'], 'application/octet-stream')).toBe(true)
+  })
+
+  it('denies a MIME type the scope does not cover', () => {
+    expect(blobScopesCover(['blob:image/*'], 'video/mp4')).toBe(false)
+  })
+
+  it('denies when there is no blob: scope', () => {
+    expect(blobScopesCover([REPO_CREATE], 'image/png')).toBe(false)
+  })
+})
+
+describe('canonicalizeScope — blob: scopes', () => {
+  it('accepts a blob: scope verbatim (normalised)', () => {
+    expect(canonicalizeScope('blob:image/*', SERVICE_DID)).toEqual({
+      ok: true,
+      scope: 'blob:image/*',
+    })
+  })
+
+  it('rejects a malformed blob: scope', () => {
+    expect(canonicalizeScope('blob:*', SERVICE_DID).ok).toBe(false)
   })
 })

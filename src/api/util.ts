@@ -9,7 +9,12 @@ import type { GroupDatabase } from '../db/schema.js'
 import { XRPCError as ClientXRPCError } from '@atproto/xrpc'
 import { XRPCError, UpstreamFailureError, ForbiddenError } from '@atproto/xrpc-server'
 import type { PdsAgentPool } from '../pds/agent.js'
-import { scopesCoverOperation, repoActionForOperation, repoScopesCover } from '../auth/scopes.js'
+import {
+  scopesCoverOperation,
+  repoActionForOperation,
+  repoScopesCover,
+  blobScopesCover,
+} from '../auth/scopes.js'
 
 /**
  * The auth-mode-dependent slice of the credential the gate needs: for an
@@ -129,7 +134,12 @@ export async function assertCanWithAudit(
     const scopes = principal.scopes ?? []
     const repoAction = repoActionForOperation(operation)
     let covered: boolean
-    if (repoAction !== undefined) {
+    if (operation === 'uploadBlob') {
+      // Blob upload: gated by a `blob:<mime>` scope against the upload's
+      // Content-Type (carried in the audit detail). No mime -> deny.
+      const mime = typeof detail?.mime === 'string' ? detail.mime : undefined
+      covered = mime !== undefined && blobScopesCover(scopes, mime)
+    } else if (repoAction !== undefined) {
       // PDS-repo write op: gated by a `repo:<collection>?action=…` scope. The
       // collection comes from the request (carried in the audit detail by the
       // handler). With no collection we cannot match a scope, so deny.
