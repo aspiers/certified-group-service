@@ -39,21 +39,43 @@ export function jsonResponse<T>(body: T) {
 /**
  * Resolve the target group for an authed request.
  *
- * Queries set `groupDid` on the credential at the verifier (from the `repo`
- * querystring or the legacy `aud` overload). Body-input methods leave it
- * undefined on the new path and pass the group as `repo` in the body, which the
- * verifier cannot read; this resolves that body `repo` (handle or DID) to a
- * registered group DID.
+ * JWT (and legacy) callers: queries set `groupDid` on the credential at the
+ * verifier (from the querystring `repo` or the legacy `aud` overload); body-input
+ * procedures leave it undefined and pass the group as `repo` in the body (the
+ * verifier can't read the body), which this resolves. Precedence mirrors the
+ * verifier: an explicit body `repo` wins; otherwise the credential's `groupDid`.
  *
- * Precedence mirrors the verifier: an explicit body `repo` wins (new path); if
- * absent, the credential's `aud`-derived `groupDid` is used (legacy path). One
- * of the two must be present.
+ * **API-key callers are different and stricter.** `verifyApiKey` already resolved
+ * the group from the **querystring** `repo` and authenticated the key against
+ * *that* group's DB, so the credential's `groupDid` is authoritative. A body
+ * `repo` cannot redirect the action to a different group — that would be a
+ * confused deputy (auth bound to group A, action on group B). So for an apiKey
+ * credential we use the credential's `groupDid` and reject a body `repo` that
+ * resolves to anything else.
  */
 export async function resolveGroupDid(
   ctx: AppContext,
-  credentials: { groupDid?: string },
+  credentials: { groupDid?: string; authKind?: 'jwt' | 'apiKey' },
   bodyRepo: string | undefined,
 ): Promise<string> {
+  if (credentials.authKind === 'apiKey') {
+    // The key was verified against credentials.groupDid (querystring repo).
+    if (!credentials.groupDid) {
+      throw new XRPCError(400, 'Missing repo', 'InvalidRequest')
+    }
+    if (bodyRepo !== undefined && bodyRepo.length > 0) {
+      const bodyGroup = await ctx.authVerifier.resolveRepoToGroup(bodyRepo)
+      if (bodyGroup !== credentials.groupDid) {
+        throw new XRPCError(
+          400,
+          'API-key request: body `repo` must match the querystring `repo` the key was authenticated against',
+          'InvalidRequest',
+        )
+      }
+    }
+    return credentials.groupDid
+  }
+
   if (bodyRepo !== undefined && bodyRepo.length > 0) {
     return ctx.authVerifier.resolveRepoToGroup(bodyRepo)
   }
