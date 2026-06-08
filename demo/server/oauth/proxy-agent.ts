@@ -3,7 +3,7 @@ import { join, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Agent } from '@atproto/api'
 import type { LexiconDoc } from '@atproto/lexicon'
-import { oauthClient } from './client.js'
+import { getOauthClient } from './client.js'
 
 /** Recursively load all .json lexicon files from a directory. */
 function loadLexicons(dir: string): LexiconDoc[] {
@@ -20,9 +20,26 @@ function loadLexicons(dir: string): LexiconDoc[] {
 }
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
-const customLexicons = loadLexicons(
-  join(__dirname, '..', '..', '..', 'lexicons', 'app', 'certified'),
-)
+
+// The custom CGS lexicons (app.certified.group.repo.*) registered on the proxy
+// agent so the @atproto/api client recognises them. They live in the repo-root
+// lexicons/; in the deployed image that resolves to /app/lexicons/app/certified.
+// Override with LEXICONS_DIR if your layout differs. Fail soft: a missing dir
+// logs a clear warning and leaves customLexicons empty (the server still boots
+// and /api/health responds) rather than crashing the whole BFF at module load.
+const lexiconsDir =
+  process.env.LEXICONS_DIR || join(__dirname, '..', '..', '..', 'lexicons', 'app', 'certified')
+
+let customLexicons: LexiconDoc[] = []
+try {
+  customLexicons = loadLexicons(lexiconsDir)
+} catch (err) {
+  console.error(
+    `[proxy-agent] could not load custom lexicons from ${lexiconsDir} — ` +
+      `record/proxy operations needing them will fail. Set LEXICONS_DIR to the ` +
+      `directory containing app/certified/*.json. Cause: ${(err as Error).message}`,
+  )
+}
 
 export function isSessionExpiredError(err: any): boolean {
   // Only treat OAuth-layer failures as session-expired.
@@ -38,7 +55,7 @@ export function isSessionExpiredError(err: any): boolean {
  * proxied through the certified_group service to the given group DID.
  */
 export async function createProxyAgent(userDid: string, groupDid: string): Promise<Agent> {
-  const oauthSession = await oauthClient.restore(userDid)
+  const oauthSession = await getOauthClient().restore(userDid)
   const agent = new Agent(oauthSession)
   const proxied = agent.withProxy('certified_group', groupDid) as Agent
   for (const doc of customLexicons) {

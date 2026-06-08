@@ -1,7 +1,13 @@
 # Railway config for the DEMO app — a separate Railway service from the group
-# service (which uses the repo-root railway.toml). Set the service's Root
-# Directory to `demo`; Railway then auto-detects this file (demo/railway.toml)
-# and builds demo/Dockerfile. No config-as-code path needs to be set.
+# service (which uses the repo-root railway.toml). The demo builds with the REPO
+# ROOT as context so it can copy the repo-root lexicons/ at build time (the
+# custom CGS lexicons are never duplicated into demo/).
+#
+# On the demo Railway service, set:
+#   - Root Directory:        the repo root (default / unset)
+#   - Config-as-code path:   railway-demo.toml (this file)
+# (Both are needed because the repo root already has railway.toml for the group
+# service, so this demo config must be selected explicitly.)
 #
 # Required service variables (set in Railway, not committed):
 #   GROUP_SERVICE_URL   e.g. https://dev.groups.certified.app
@@ -14,7 +20,7 @@
 
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "demo/Dockerfile"
 
 [deploy]
 healthcheckPath = "/api/health"
