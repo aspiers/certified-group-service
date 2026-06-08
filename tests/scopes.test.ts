@@ -8,6 +8,8 @@ import {
   firstInvalidScope,
   canonicalizeScope,
   canonicalizeScopes,
+  repoActionForOperation,
+  repoScopesCover,
 } from '../src/auth/scopes.js'
 
 const SERVICE_DID = 'did:web:groups.example.com'
@@ -112,9 +114,9 @@ describe('canonicalizeScope', () => {
     if (!r.ok) expect(r.reason).toMatch(/aud must be this service/)
   })
 
-  it('rejects a non-rpc / malformed scope', () => {
+  it('rejects a malformed / unsupported scope', () => {
     expect(canonicalizeScope('not-a-scope', SERVICE_DID).ok).toBe(false)
-    expect(canonicalizeScope('repo:app.bsky.feed.post', SERVICE_DID).ok).toBe(false)
+    expect(canonicalizeScope('rpc:', SERVICE_DID).ok).toBe(false)
   })
 })
 
@@ -129,5 +131,85 @@ describe('canonicalizeScopes', () => {
     const r = canonicalizeScopes(['rpc:app.certified.group.member.list', foreign], SERVICE_DID)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.scope).toBe(foreign)
+  })
+})
+
+const POST = 'app.bsky.feed.post'
+const REPO_CREATE = 'repo:app.bsky.feed.post?action=create'
+
+describe('repoActionForOperation', () => {
+  it('maps write ops to their repo: action; own/any collapse to the same action', () => {
+    expect(repoActionForOperation('createRecord')).toBe('create')
+    expect(repoActionForOperation('putOwnRecord')).toBe('update')
+    expect(repoActionForOperation('putAnyRecord')).toBe('update')
+    expect(repoActionForOperation('putRecord:profile')).toBe('update')
+    expect(repoActionForOperation('deleteOwnRecord')).toBe('delete')
+    expect(repoActionForOperation('deleteAnyRecord')).toBe('delete')
+  })
+
+  it('returns undefined for non-repo-write ops', () => {
+    expect(repoActionForOperation('member.list')).toBeUndefined()
+    expect(repoActionForOperation('audit.query')).toBeUndefined()
+    expect(repoActionForOperation('role.set')).toBeUndefined()
+    expect(repoActionForOperation('uploadBlob')).toBeUndefined() // decided in wire-write-handlers
+  })
+})
+
+describe('repoScopesCover', () => {
+  it('grants when a repo: scope covers the collection+action', () => {
+    expect(repoScopesCover([REPO_CREATE], 'createRecord', POST)).toBe(true)
+  })
+
+  it('denies a different action on the same collection', () => {
+    expect(repoScopesCover([REPO_CREATE], 'deleteOwnRecord', POST)).toBe(false)
+  })
+
+  it('denies a different collection', () => {
+    expect(repoScopesCover([REPO_CREATE], 'createRecord', 'app.bsky.actor.profile')).toBe(false)
+  })
+
+  it('a wildcard repo:* scope covers any collection', () => {
+    expect(repoScopesCover(['repo:*?action=create'], 'createRecord', POST)).toBe(true)
+  })
+
+  it('own and any map to the same delete action (role decides whose records)', () => {
+    const del = ['repo:app.bsky.feed.post?action=delete']
+    expect(repoScopesCover(del, 'deleteOwnRecord', POST)).toBe(true)
+    expect(repoScopesCover(del, 'deleteAnyRecord', POST)).toBe(true)
+  })
+
+  it('returns false for a non-repo-write op even with a repo scope', () => {
+    expect(repoScopesCover(['repo:*?action=create'], 'member.list', POST)).toBe(false)
+  })
+})
+
+describe('canonicalizeScope — repo: scopes', () => {
+  it('accepts a repo: scope verbatim (normalised, no aud appended)', () => {
+    const r = canonicalizeScope(REPO_CREATE, SERVICE_DID)
+    expect(r).toEqual({ ok: true, scope: REPO_CREATE })
+  })
+
+  it('rejects a malformed repo: scope', () => {
+    expect(canonicalizeScope('repo:', SERVICE_DID).ok).toBe(false)
+  })
+
+  it('rejects an unsupported scope kind', () => {
+    expect(canonicalizeScope('blob:*', SERVICE_DID).ok).toBe(false)
+    expect(canonicalizeScope('garbage', SERVICE_DID).ok).toBe(false)
+  })
+
+  it('canonicalizes a mixed rpc: + repo: list', () => {
+    const r = canonicalizeScopes(['rpc:app.certified.group.member.list', REPO_CREATE], SERVICE_DID)
+    expect(r).toEqual({ ok: true, scopes: [MEMBER_LIST_SCOPE, REPO_CREATE] })
+  })
+})
+
+describe('firstInvalidScope — both kinds', () => {
+  it('accepts rpc: and repo: scopes', () => {
+    expect(firstInvalidScope([MEMBER_LIST_SCOPE, REPO_CREATE])).toBeNull()
+  })
+
+  it('rejects an unsupported kind', () => {
+    expect(firstInvalidScope([REPO_CREATE, 'blob:*'])).toBe('blob:*')
   })
 })

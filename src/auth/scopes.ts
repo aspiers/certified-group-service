@@ -1,4 +1,5 @@
-import { ScopesSet, RpcPermission } from '@atproto/oauth-scopes'
+import { ScopesSet, RpcPermission, RepoPermission } from '@atproto/oauth-scopes'
+import type { RepoAction } from '@atproto/oauth-scopes'
 import type { Operation } from '../rbac/permissions.js'
 
 /**
@@ -39,6 +40,32 @@ export function lxmForOperation(operation: Operation): string | undefined {
 }
 
 /**
+ * Map a PDS-repo write `Operation` to the AT Protocol `repo:` scope action it
+ * requires. These ops act on the group's PDS repo (proxied), so they are gated
+ * by `repo:<collection>?action=…` scopes rather than `rpc:`. The collection is
+ * not known here — it comes from the request at gate time (`repoScopesCover`).
+ *
+ * `own`/`any` is **not** a scope axis (AT Protocol `repo:` scopes have no notion
+ * of record ownership); that distinction stays in the RBAC role check. So
+ * `deleteOwnRecord` and `deleteAnyRecord` map to the same `delete` action — the
+ * key's scope says "may delete in this collection", the role decides whose
+ * records. See docs/design/api-keys.md.
+ */
+const OPERATION_REPO_ACTION: Partial<Record<Operation, RepoAction>> = {
+  createRecord: 'create',
+  putOwnRecord: 'update',
+  putAnyRecord: 'update',
+  'putRecord:profile': 'update',
+  deleteOwnRecord: 'delete',
+  deleteAnyRecord: 'delete',
+}
+
+/** The `repo:` action an operation needs, or undefined if it is not a repo-write op. */
+export function repoActionForOperation(operation: Operation): RepoAction | undefined {
+  return OPERATION_REPO_ACTION[operation]
+}
+
+/**
  * The `rpc:` scope string an operation requires, or undefined if the operation
  * is not key-accessible. Computed via the package helper, not hand-rolled.
  */
@@ -65,15 +92,35 @@ export function scopesCoverOperation(
 }
 
 /**
+ * Does a granted scope set cover a repo-write op on a specific collection? Unlike
+ * `rpc:` scopes, `repo:` scopes are keyed by `{collection, action}` and carry no
+ * `aud`. The collection comes from the request (the record's collection); the
+ * action from `repoActionForOperation`. Returns false if the operation is not a
+ * repo-write op.
+ */
+export function repoScopesCover(
+  grantedScopes: string[],
+  operation: Operation,
+  collection: string,
+): boolean {
+  const action = repoActionForOperation(operation)
+  if (action === undefined) return false
+  const granted = ScopesSet.fromString(grantedScopes.join(' '))
+  return granted.matches('repo', { collection, action })
+}
+
+/**
  * Validate that every scope string in a list parses as a known scope. Used at
  * key-creation time to reject garbage scopes before they are stored. Returns the
  * first invalid scope, or null if all are valid.
  */
 export function firstInvalidScope(scopes: string[]): string | null {
   for (const scope of scopes) {
-    // A scope is valid if any resource permission parser accepts it. We only
-    // emit/consume `rpc:` scopes in iteration 1, so check that form.
-    if (RpcPermission.fromString(scope) === null) return scope
+    // Valid if it parses as one of the scope kinds we consume: `rpc:` (service
+    // methods) or `repo:` (PDS-repo writes).
+    const valid =
+      RpcPermission.fromString(scope) !== null || RepoPermission.fromString(scope) !== null
+    if (!valid) return scope
   }
   return null
 }
@@ -84,16 +131,24 @@ export type ScopeCanonicalization =
   | { ok: false; scope: string; reason: string }
 
 /**
- * Canonicalize a client-supplied `rpc:` scope to this service's stored form.
+ * Canonicalize a client-supplied scope to this service's stored form.
  *
- * A key only ever calls the CGS it was created on, so the scope `aud` can only
- * be this service's ref — there is no other valid value. Clients therefore pass
- * the friendly `rpc:<lxm>` form and we append the `aud` here, matching what the
- * gate checks. An already-canonical scope is accepted idempotently **iff** its
- * `aud` is ours; a scope naming a different `aud` is rejected (it could never
- * match the gate, so storing it would be a silent dead grant).
+ * - **`rpc:` scopes** are service-bound. A key only ever calls the CGS it was
+ *   created on, so the scope `aud` can only be this service's ref. Clients pass
+ *   the friendly `rpc:<lxm>` form and we append the `aud`. An already-canonical
+ *   `rpc:` scope is accepted **iff** its `aud` is ours; a different `aud` is
+ *   rejected (it could never match the gate — a silent dead grant).
+ * - **`repo:` scopes** (`repo:<collection>?action=…`) carry **no `aud`** — they
+ *   name a collection + action on the group's PDS repo. They are accepted
+ *   verbatim after validation; nothing is appended.
  */
 export function canonicalizeScope(scope: string, serviceDid: string): ScopeCanonicalization {
+  if (scope.startsWith('repo:')) return canonicalizeRepoScope(scope)
+  if (scope.startsWith('rpc:')) return canonicalizeRpcScope(scope, serviceDid)
+  return { ok: false, scope, reason: 'unsupported scope kind (expected rpc: or repo:)' }
+}
+
+function canonicalizeRpcScope(scope: string, serviceDid: string): ScopeCanonicalization {
   const aud = serviceScopeAud(serviceDid)
 
   // Already carries params (an `aud=`): accept only if that aud is ours.
@@ -115,6 +170,15 @@ export function canonicalizeScope(scope: string, serviceDid: string): ScopeCanon
     return { ok: false, scope, reason: 'invalid rpc method (lxm)' }
   }
   return { ok: true, scope: canonical }
+}
+
+function canonicalizeRepoScope(scope: string): ScopeCanonicalization {
+  // No aud and nothing to append — just validate the collection?action= form.
+  // Re-emit via toString() so the stored string is normalised (e.g. default
+  // action set) and matches what the gate computes.
+  const parsed = RepoPermission.fromString(scope)
+  if (parsed === null) return { ok: false, scope, reason: 'unparseable repo: scope' }
+  return { ok: true, scope: parsed.toString() }
 }
 
 /**
