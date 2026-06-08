@@ -193,10 +193,9 @@ const groupAgent = createGroupAgent(agent, groupDid)
 > **service** DID instead — `withProxy('certified_group_service', cgsServiceDid)` — so
 > the PDS mints `aud` = the service DID; also send an explicit `repo` to name the group.
 > See [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27).
-> (If you stay on the legacy proxy target, adding `repo` silences the warning **only for
-> query methods**, where `repo` rides the querystring and is visible at auth time; for
-> the JSON-body procedures in Step 3 it does not, because the body is invisible when the
-> service decides legacy-vs-new — those need the service-DID `aud`.)
+> Do **not** add `repo` while staying on the legacy proxy target: for a query, `repo`
+> present with `aud` = group DID is a hard `401`, not a silenced warning. `repo` and the
+> service-DID `aud` must change together.
 
 ## Step 3: Make authenticated requests
 
@@ -217,9 +216,8 @@ stock `@atproto/api` typed call already emits.
 > on the legacy path (it mints `aud` = the group DID), so the examples below carry a
 > `Deprecation` header; switch the proxy target to the service DID
 > (`withProxy('certified_group_service', cgsServiceDid)`) to put them on the supported
-> path. Note that adding `repo` alone clears the warning **only for query methods**; the
-> JSON-body procedures below need the service-DID `aud` (their body `repo` is invisible
-> when the service decides legacy-vs-new). See
+> path. The `repo` and the service-DID `aud` go together — for a query, `repo` with a
+> group-DID `aud` is a hard `401`, not a partially-migrated call. See
 > [Migrating from the legacy `aud` form (#27)](#migrating-from-the-legacy-aud-form-27)
 > and `docs/design/aud-deprecation.md`.
 
@@ -684,22 +682,24 @@ re-resolves it. Most apps skip the first leg by knowing the service URL out-of-b
 `GROUP_SERVICE_DID` constant), and direct calls skip resolution entirely. See
 `docs/design/aud-deprecation.md` ("Service-DID resolution under proxying") for the why.
 
-**The two migration steps.** They are not symmetric across method kinds, because the
-service decides legacy-vs-new at the **auth layer**, which sees the querystring but not
-the request body (auth runs before body parsing):
+**Migrating: `repo` and `aud` change together.** A request is either fully legacy
+(`aud` = group DID, no `repo`) or fully new (`aud` = service DID, with `repo`). A
+half-migrated mix is **not** a graceful in-between — it is rejected. The service decides
+this at the **auth layer**, which sees the querystring but not the request body (auth runs
+before body parsing), so the exact rule differs by method kind:
 
-1. **Add `repo`** — body for procedures, querystring for queries / raw-body methods.
-   For **queries** (and `uploadBlob` / `destroy`), the querystring `repo` is visible at
-   auth time, so adding it moves you onto the supported path immediately. For
-   **JSON-body procedures**, the body `repo` is invisible at auth time, so it does **not**
-   silence the deprecation signal on its own — step 2 is required.
-2. **Switch the minted `aud`** from the group DID to the service DID. With a querystring
-   `repo` present, `aud` **must** be the service DID or the request is rejected with
-   `jwt audience does not match service did`. For JSON-body procedures, setting `aud` to
-   the service DID is what takes the call off the legacy path (the body `repo` is then the
-   group selector).
+- **Queries** (and `uploadBlob` / `destroy`, whose `repo` rides the querystring): the
+  verifier sees `repo`, and when it is present it **requires** `aud` = the service DID.
+  Sending `repo` while `aud` is still the group DID is rejected with
+  `401 jwt audience does not match service did`. So you cannot "add `repo` now, fix `aud`
+  later" — change both at once.
+- **JSON-body procedures** (`createRecord`, `putRecord`, `deleteRecord`, `member.add`,
+  `member.remove`, `role.set`): the body `repo` is invisible at auth time, so the verifier
+  decides purely on `aud`. Setting `aud` = the service DID takes the call off the legacy
+  path; the handler then reads the body `repo` as the group selector. (A token with
+  `aud` = group DID is treated as legacy regardless of a body `repo`.)
 
-In all cases, the reliable way off the deprecated path is to mint `aud` = the service DID.
+In all cases, the way off the deprecated path is to mint `aud` = the service DID (and, for queries, send `repo` in the same call — never one without the other).
 
 **Direct vs. proxied.** Both forms can fully migrate:
 

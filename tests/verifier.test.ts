@@ -266,8 +266,10 @@ describe('AuthVerifier', () => {
     expect(mockIdResolver.handle.resolve).toHaveBeenCalledWith('group.example.com')
   })
 
-  it('new path: explicit repo wins even when aud is also the group DID (no legacy flag)', async () => {
+  it('new path: querystring repo with aud=groupDid is a hard error (no half-migrated mix)', async () => {
     // A mid-migration caller that added `repo` but still sets aud=groupDid.
+    // repo present forces the new-path aud check, which requires the service DID;
+    // a group-DID aud is rejected rather than silently downgraded to legacy.
     const now = Math.floor(Date.now() / 1000)
     fakeVerifyJwt.mockResolvedValue({
       iss: 'did:plc:caller',

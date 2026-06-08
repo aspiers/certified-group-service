@@ -387,11 +387,18 @@ export interface GroupAuthCredentials {
 `assertTokenLifetime`, nonce/replay (`jti`), and signature checks are unchanged
 for both forms — only the audience check and the group-source differ.
 
-Both forms can be sent **together** during migration (a client adds `repo` but
-still sets `aud=groupDid`). Precedence: **explicit `repo` wins** (new path, no
-warning), regardless of `aud`. A client migrates by _adding_ `repo`; the warning
-stops the moment it does. A client sending `repo` + `aud=serviceDid` is fully
-migrated.
+`repo` and `aud` are **not** independently switchable: a half-migrated mix is
+rejected, not silently downgraded. When `repo` is present (a query), the verifier
+**requires** `aud = serviceDid` — `repo` + `aud=groupDid` throws
+`jwt audience does not match service did` (a hard `401`). So a client cannot "add
+`repo` first and fix `aud` later"; it migrates a query by switching both at once.
+Only `repo` + `aud=serviceDid` is the fully-migrated, warning-free state.
+
+(An earlier draft of this design had "explicit `repo` wins regardless of `aud`,
+no warning." That was **rejected** during implementation in favour of the hard
+error above: a token whose signed `aud` still names the group is not a
+service-targeted token, and accepting it would blur the very claim this fix
+exists to correct. The verifier and its tests implement the hard error.)
 
 ### Lexicons — add `repo` to query methods
 
@@ -425,11 +432,13 @@ authed methods get it uniformly.
 
 ### Client side (out of this repo)
 
-A client migrates by **adding `repo: <groupDid>`** to each call and switching
-`getServiceAuth?aud=<groupDid>` → `aud=<cgsServiceDid>`. Until it does, it keeps
-working on the legacy path and receives the deprecation signal. The two changes
-are independent: adding `repo` silences the warning even before `aud` is
-corrected.
+A client migrates by **adding `repo: <groupDid>`** to each call **and** switching
+`getServiceAuth?aud=<groupDid>` → `aud=<cgsServiceDid>`. For queries these are a
+single coupled change: `repo` present with `aud=groupDid` is a hard `401` (see
+above), so the client must do both together. For body-input procedures the body
+`repo` is invisible at auth time, so `aud=<cgsServiceDid>` alone moves the call to
+the new path (the handler then reads the body `repo`). Until migrated, a call
+stays fully legacy (`aud=groupDid`, no `repo`) and receives the deprecation signal.
 
 ---
 
@@ -465,9 +474,11 @@ At that point set `Sunset` ahead of the removal release, then remove.
 
 ## Testing
 
-- **Verifier unit tests** (`tests/auth.test.ts` style): new `repo`-field path
+- **Verifier unit tests** (`tests/verifier.test.ts`): new `repo`-field path
   (DID and handle), `aud === serviceDid` accepted; legacy `aud`-as-group still
-  accepted and flags `legacyAud`; both-present → `repo` wins, no warning;
+  accepted and flags `legacyAud`; `repo` present with `aud=groupDid` → hard
+  `401 jwt audience does not match service did` (not a graceful downgrade);
+  service-id fragment on `aud` accepted, a foreign fragment rejected;
   neither → reject.
 - **Per-method tests** that today rely on `aud`-derived `groupDid` (e.g.
   `tests/membership.test.ts`, `member.list`) get a new case sending `repo`

@@ -36,7 +36,7 @@ A transitional form remains accepted during the migration window: set the JWT `a
 
 The deprecation is keyed off `aud`, because the service determines it at the auth layer — which sees the querystring but **not** the request body (auth runs before body parsing). Concretely:
 
-- **Query methods** (and `uploadBlob` / `destroy`, which carry `repo` on the querystring): adding `?repo=` moves you onto the new path immediately. With `repo` present, `aud` **must** be the service DID, or the request is rejected with `jwt audience does not match service did`.
+- **Query methods** (and `uploadBlob` / `destroy`, which carry `repo` on the querystring): `repo` and a service-DID `aud` must be sent **together**. When `repo` is present the verifier **requires** `aud` = the service DID; `repo` present with `aud` = a group DID is rejected with `jwt audience does not match service did`. There is no half-migrated query — adding `?repo=` without also fixing `aud` is a hard error, not a silenced deprecation.
 - **JSON-body procedures** (`createRecord`, `member.add`, …): a request is treated as legacy whenever `aud` is a group DID, **even if `repo` is in the body** — the body is invisible at auth time, so it cannot suppress the deprecation signal. To fully migrate such a call, set `aud` to the service DID (the body `repo` is then the group selector).
 
 In all cases, the way off the deprecated path is to set `aud` to the service DID.
