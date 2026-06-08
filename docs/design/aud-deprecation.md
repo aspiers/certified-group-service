@@ -12,8 +12,9 @@ Tracking issues:
   (the narrow request #26 generalises; blocked transitively by this).
 
 This is the **design rationale** (the _why_). For the client-facing migration
-how-to — the legacy-vs-new table, per-method `repo` placement, direct vs proxied,
-and detecting un-migrated calls — see [`../aud-migration.md`](../aud-migration.md).
+how-to — the legacy-vs-new table, per-method `repo` placement, non-proxied vs
+proxied calls, and detecting un-migrated calls — see
+[`../aud-migration.md`](../aud-migration.md).
 
 This document designs the `aud` correctness fix that [`api-keys.md`](./api-keys.md)
 names as a prerequisite but deliberately leaves out of its own scope (see that
