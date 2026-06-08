@@ -59,6 +59,10 @@ export default function (server: Server, ctx: AppContext) {
         if (updated) {
           revokedAt = updated.revoked_at
         } else {
+          /* c8 ignore start -- TOCTOU race: only hit if a concurrent request
+             revoked the same key between our existence check and this UPDATE.
+             In-memory SQLite serialises test requests, so this branch is not
+             deterministically reachable in unit tests. */
           // Lost a concurrent revoke: the key is already revoked. Read the
           // winner's timestamp so the response is still correct (not a 500).
           const current = await groupDb
@@ -67,14 +71,17 @@ export default function (server: Server, ctx: AppContext) {
             .where('key_ref', '=', keyRef)
             .executeTakeFirst()
           revokedAt = current?.revoked_at ?? null
+          /* c8 ignore stop */
         }
       }
 
+      /* c8 ignore start -- only reachable if the row was deleted between the
+         existence check above and the re-read in the race branch; not
+         deterministically reachable in tests. */
       if (revokedAt === null) {
-        // Only reachable if the row was deleted between our existence check and
-        // the re-read — treat as not found rather than returning a null time.
         throw new XRPCError(404, 'API key not found', 'KeyNotFound')
       }
+      /* c8 ignore stop */
 
       // `revokedKeyRef` (the key this action revoked), distinct from `apiKeyRef`
       // which attributes an action performed *by* a key (see assertCanWithAudit).

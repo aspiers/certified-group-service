@@ -80,14 +80,14 @@ feature), add tests for other code to compensate.
 
 ## Coverage Summary
 
-Baseline as of this document (240 tests across 23 files):
+Baseline as of this document (380 tests across 34 files):
 
 | Metric     | Coverage | Threshold |
 | ---------- | -------- | --------- |
-| Statements | 91.65%   | 91        |
-| Branches   | 91.85%   | 91        |
-| Functions  | 87.61%   | 87        |
-| Lines      | 91.65%   | 91        |
+| Statements | 93.24%   | 93        |
+| Branches   | 91.08%   | 91        |
+| Functions  | 90.84%   | 90        |
+| Lines      | 93.24%   | 93        |
 
 ### Known gaps (highest impact first)
 
