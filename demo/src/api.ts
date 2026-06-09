@@ -111,13 +111,17 @@ export const deleteApiKey = (groupDid: string, keyRef: string) =>
 // Using a key authenticates via X-API-Key (no owner session / proxy). The BFF
 // makes the direct call so the secret never leaves the server unnecessarily and
 // CORS/cross-origin is avoided. `repo` rides the querystring (required on the
-// key path, even for write procedures).
+// key path, even for write procedures), so it is NOT repeated in the body — the
+// service rejects a body `repo` that disagrees with the querystring one.
 export const callWithApiKey = (args: {
   key: string
   nsid: string
   repo: string
   method?: 'GET' | 'POST'
+  /** POST procedure input (everything except `repo`). */
   body?: Record<string, any>
+  /** GET query filters, appended to the querystring alongside `repo`. */
+  params?: Record<string, any>
 }) =>
   request<{ status: number; data: any }>('/keys/call', {
     method: 'POST',

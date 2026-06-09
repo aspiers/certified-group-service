@@ -15,15 +15,20 @@ const UPSTREAM_TIMEOUT_MS = 15_000
  * its own. `repo` rides the querystring — required on the key path, even for
  * write procedures (the service resolves the group before the body is parsed).
  *
- * Body: { key, nsid, repo, method?, body? }
+ * `params` (GET queries only) are appended to the querystring alongside `repo`,
+ * so a query method like audit.query can be exercised with its filters. They are
+ * ignored for POST, whose inputs travel in `body`.
+ *
+ * Body: { key, nsid, repo, method?, body?, params? }
  */
 router.post('/call', async (req, res) => {
-  const { key, nsid, repo, method = 'GET', body } = req.body as {
+  const { key, nsid, repo, method = 'GET', body, params } = req.body as {
     key?: string
     nsid?: string
     repo?: string
     method?: 'GET' | 'POST'
     body?: unknown
+    params?: Record<string, unknown>
   }
 
   if (!key || !nsid || !repo) {
@@ -42,7 +47,14 @@ router.post('/call', async (req, res) => {
     return res.status(500).json({ error: 'GROUP_SERVICE_URL not configured' })
   }
 
-  const url = `${base.replace(/\/$/, '')}/xrpc/${nsid}?repo=${encodeURIComponent(repo)}`
+  // `repo` is always present; GET query filters (if any) ride alongside it.
+  const query = new URLSearchParams({ repo })
+  if (verb === 'GET' && params && typeof params === 'object') {
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== '') query.set(k, String(v))
+    }
+  }
+  const url = `${base.replace(/\/$/, '')}/xrpc/${nsid}?${query.toString()}`
 
   // Bound the upstream call so a hung group service can't tie up a worker.
   const controller = new AbortController()
