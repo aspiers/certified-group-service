@@ -28,9 +28,9 @@ This document is that "later".
 ## A permission set is a shared, published artifact — two consumers
 
 The central framing. A permission set is **not** a CGS-specific object. Per the
-spec it is *"published publicly and can be used by any client developer"*, and
-*"Authorization Servers resolve, authenticate, and process permission-sets
-dynamically."* The same published set serves two consumers:
+spec it is _"published publicly and can be used by any client developer"_, and
+_"Authorization Servers resolve, authenticate, and process permission-sets
+dynamically."_ The same published set serves two consumers:
 
 1. **OAuth clients** — a client requests `include:<nsid>` as an OAuth scope; the
    user's PDS (the Authorization Server) resolves the set and expands it into the
@@ -55,9 +55,9 @@ separate kind of object — it must match what is published.
 ## Which sets, and where they live
 
 A permission set may only contain permissions under its **own** namespace
-authority — spec, verbatim: *"Permission sets are limited to expressing
+authority — spec, verbatim: _"Permission sets are limited to expressing
 permissions that reference resources under the same NSID namespace as the set
-itself."* It applies uniformly to `repo:` (by collection NSID) and `rpc:` (by lxm
+itself."_ It applies uniformly to `repo:` (by collection NSID) and `rpc:` (by lxm
 NSID). So a set lives under, and is authored/published by, the authority of the
 namespace it grants.
 
@@ -66,10 +66,10 @@ The sets we actually need are **record-collection CRUD** bundles — the genuine
 both `repo:` sets, both authored and published from the **`hypercerts-lexicon`**
 repo (which is the authority for both namespaces):
 
-| Set (suggested NSID) | Grants CRUD on | Authored in |
-| --- | --- | --- |
+| Set (suggested NSID)              | Grants CRUD on                            | Authored in          |
+| --------------------------------- | ----------------------------------------- | -------------------- |
 | `org.hypercerts.permissions.crud` | all `org.hypercerts.*` record collections | `hypercerts-lexicon` |
-| `app.certified.permissions.crud` | all `app.certified.*` record collections | `hypercerts-lexicon` |
+| `app.certified.permissions.crud`  | all `app.certified.*` record collections  | `hypercerts-lexicon` |
 
 Both are to be tracked by one issue in that repo (to be filed there, with the
 full enumerated collection lists, after this design lands).
@@ -78,13 +78,14 @@ full enumerated collection lists, after this design lands).
 
 CGS's own service methods (`app.certified.group.*` / `app.certified.groups.*`)
 are `rpc:` resources. We considered a CGS-method set (e.g. bundling `member.list`
-+ `audit.query`) and **rejected it**: those methods are *fundamentally different*
-permissions with no use case that wants exactly them together — grouping them
-would bundle by grammar ("they're all reads"), not by what any client needs. A
-set earns its place only when a known consumer repeatedly needs a specific
-multi-scope bundle; absent that, clients request the individual `rpc:` scopes
-they need. If such a use case appears, a CGS-method set can be added later (under
-CGS's own `app.certified.group.*` authority, which this repo controls).
+together with `audit.query`) and **rejected it**: those methods are
+_fundamentally different_ permissions with no use case that wants exactly them
+together — grouping them would bundle by grammar ("they're all reads"), not by
+what any client needs. A set earns its place only when a known consumer
+repeatedly needs a specific multi-scope bundle; absent that, clients request the
+individual `rpc:` scopes they need. If such a use case appears, a CGS-method set
+can be added later (under CGS's own `app.certified.group.*` authority, which this
+repo controls).
 
 ## Background: how `@atproto/oauth-scopes` models a permission set
 
@@ -127,22 +128,22 @@ set safe.
 ### Collections are enumerated, never wildcarded
 
 A `repo:` permission inside a set names collections by **exact NSID**. The spec,
-verbatim: *"Wildcards are not supported in permissions within a permission set."*
+verbatim: _"Wildcards are not supported in permissions within a permission set."_
 So a CRUD set cannot say "all `org.hypercerts.*` collections" — it **enumerates**
-each one. The enumerated list *is* the grant and the security boundary; a new
+each one. The enumerated list _is_ the grant and the security boundary; a new
 collection is uncovered until it is added to the set and re-published.
 
 ## `aud` and `inheritAud`
 
-An `rpc:` scope authorizes "call method *lxm* at audience *aud*" — `aud` names
+An `rpc:` scope authorizes "call method _lxm_ at audience _aud_" — `aud` names
 **which service**. A `repo:` scope has **no** `aud` (it targets the user's own
 repo).
 
 - For an **OAuth client**, `aud` is load-bearing: the grant lives on the user's
   PDS, which proxies to many services, so the scope must say which service it
   authorizes. The client supplies `aud` on the `include:` (`include:<nsid>?aud=…`)
-  and, per spec, *"the `aud` parameter on the `include` will be passed down to
-  those specific `rpc` permissions"* marked `inheritAud: true`.
+  and, per spec, _"the `aud` parameter on the `include` will be passed down to
+  those specific `rpc` permissions"_ marked `inheritAud: true`.
 - For a **CGS API key**, `aud` is redundant — a key is only ever presented to
   CGS — but the `@atproto/oauth-scopes` grammar still requires an `aud` on a
   parsed `rpc:` scope. So CGS stamps its own service ref as a formality.
@@ -206,7 +207,7 @@ consumer CGS does it at `keys.create`.
 > **The DNS step is the one new piece for CGS.** `@atproto/identity`'s
 > `IdResolver` handles handle/DID/DID-doc resolution but **not** `_lexicon.`
 > NSID-authority TXT lookups; a follow-up adds that resolver plus a spec-compliant
-> cache (the spec recommends a **~24h stale lifetime**, and warns *not* to
+> cache (the spec recommends a **~24h stale lifetime**, and warns _not_ to
 > long-cache the DNS step). Until that lands, CGS API keys that reference a set
 > are rejected at create with a clear error; a backend still lists its concrete
 > `repo:org.hypercerts.<x>?action=…` scopes explicitly (exactly as iteration-1
@@ -232,14 +233,17 @@ Contained in the scope layer + create handler:
    // expandIncludes(scopes, ctx) -> string[]
    for (const scope of scopes) {
      const inc = IncludeScope.fromString(scope)
-     if (!inc) { out.push(scope); continue }          // not an include: -> pass through
-     const set = await resolvePermissionSet(ctx, inc.nsid)  // Lexicon resolution (cached)
-     out.push(...inc.toScopes(set))                   // authority-checked by the lib
+     if (!inc) {
+       out.push(scope)
+       continue
+     } // not an include: -> pass through
+     const set = await resolvePermissionSet(ctx, inc.nsid) // Lexicon resolution (cached)
+     out.push(...inc.toScopes(set)) // authority-checked by the lib
    }
    ```
 
    `firstInvalidScope` / `canonicalizeScope` currently reject anything that is not
-   `rpc:`/`repo:`/`blob:` — `include:` must be expanded away *before* it reaches
+   `rpc:`/`repo:`/`blob:` — `include:` must be expanded away _before_ it reaches
    them, so they need no new branch (they only ever see concrete scopes).
 
    > **Confirm at implementation:** that `IncludeScope.toScopes` applies an
@@ -292,13 +296,13 @@ CGS resolves the same set and expands it; the returned `scopes` array shows the
 ```jsonc
 {
   "keyRef": "…",
-  "key": "…",                       // once
+  "key": "…", // once
   "scopes": [
     "repo:org.hypercerts.claim.activity?action=create&action=update&action=delete",
     "repo:org.hypercerts.claim.contribution?action=create&action=update&action=delete",
-    "…one per org.hypercerts.* collection…"
+    "…one per org.hypercerts.* collection…",
   ],
-  "createdAt": "…"
+  "createdAt": "…",
 }
 ```
 
@@ -316,7 +320,7 @@ ride in a set — see non-goals).
   permissions; the permission-set form carries no blob accepts. A key needing
   blob upload passes an explicit `blob:` scope alongside any `include:`.
 - **Authoring/publishing the sets.** Owned by the namespace operators
-  (`hypercerts-lexicon`), tracked by a separate issue. This repo only *consumes*
+  (`hypercerts-lexicon`), tracked by a separate issue. This repo only _consumes_
   sets.
 - **Re-expanding issued keys when a set changes.** We expand at create time; an
   `include:`-minted key is a snapshot.
