@@ -47,13 +47,22 @@ router.post('/call', async (req, res) => {
     return res.status(500).json({ error: 'GROUP_SERVICE_URL not configured' })
   }
 
-  // `repo` is always present; GET query filters (if any) ride alongside it.
-  const query = new URLSearchParams({ repo })
-  if (verb === 'GET' && params && typeof params === 'object') {
+  // Collect GET query filters, then force `repo` in last so a caller-supplied
+  // `repo` param can never override the top-level one (confused-deputy: it would
+  // retarget the call at a different group). Non-primitive values are rejected
+  // rather than String()'d into junk like `[object Object]`.
+  const filtered: Record<string, string> = {}
+  if (verb === 'GET' && params && typeof params === 'object' && !Array.isArray(params)) {
     for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== null && v !== '') query.set(k, String(v))
+      if (k === 'repo') continue
+      if (v === undefined || v === null || v === '') continue
+      if (typeof v !== 'string' && typeof v !== 'number' && typeof v !== 'boolean') {
+        return res.status(400).json({ error: `param "${k}" must be a primitive value` })
+      }
+      filtered[k] = String(v)
     }
   }
+  const query = new URLSearchParams({ ...filtered, repo })
   const url = `${base.replace(/\/$/, '')}/xrpc/${nsid}?${query.toString()}`
 
   // Bound the upstream call so a hung group service can't tie up a worker.

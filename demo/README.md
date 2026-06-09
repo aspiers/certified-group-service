@@ -23,8 +23,9 @@ Each page maps to part of the CGS surface:
 | **API Keys**  | Mint scope-limited API keys, show the secret once, list/revoke, and **use** a key against any key-accessible XRPC. |
 
 The **API Keys** page is the most complete example of the key framework: it mints
-a key with a scope picker (read `rpc:` scopes, record-write `repo:` scopes, blob
-`blob:` scopes), shows the plaintext exactly once, and lists/revokes keys. Its
+a key with a scope picker (`rpc:` scopes for service methods, `repo:` scopes for
+record writes, and `blob:` scopes), shows the plaintext exactly once, and
+lists/revokes keys. Its
 **Use a key** box then **calls any key-accessible XRPC with the key via the
 `X-API-Key` header** — no owner session — so you can watch a key work on its own
 (and get a `403` when it lacks the scope). The method picker offers the methods a
