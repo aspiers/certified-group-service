@@ -24,6 +24,10 @@ export function CopyDid({ did, truncate, style, label }: CopyDidProps) {
 
   const display = label ?? (truncate ? `${did.slice(0, 20)}...` : did)
 
+  // Signal a successful copy without changing the rendered text — swapping in
+  // "Copied!" would change the element's width and reflow the surrounding
+  // layout. Instead the text stays put and briefly flashes green; the tooltip
+  // carries the "Copied!" wording.
   return (
     <span
       onClick={handleClick}
@@ -33,9 +37,10 @@ export function CopyDid({ did, truncate, style, label }: CopyDidProps) {
         fontFamily: 'monospace',
         borderBottom: '1px dashed #999',
         ...style,
+        ...(copied ? { color: '#27ae60', borderBottomColor: '#27ae60' } : null),
       }}
     >
-      {copied ? 'Copied!' : display}
+      {display}
     </span>
   )
 }
