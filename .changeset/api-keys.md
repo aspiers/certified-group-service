@@ -2,12 +2,10 @@
 'group-service': minor
 ---
 
-API keys are now available for backend services. Group owners can create long-lived keys, limit what each key can do, and revoke them without rotating the owner's signing key or relying on short-lived service-auth tokens.
-
-Keys also support reusable permission sets, so owners can choose a published bundle instead of listing every record permission by hand. Permission sets are copied into the key when it is created; recreate the key to pick up later changes to a set.
+Backend services can now use revocable API keys for group-owned records.
 
 **Affects:** Client app developers, Operators
 
-Operators do not need new environment variables or a manual migration. Leaked keys are recognizable by the `cgsk_` prefix and can be revoked.
+**Client app developers:** group owners can create, list, and revoke keys with `app.certified.group.keys.create`, `app.certified.group.keys.list`, and `app.certified.group.keys.delete`. Key auth uses `X-API-Key` and supports explicit scopes plus reusable permission-set scopes such as `include:org.hypercerts.authWrite`, so apps no longer need to list every record permission by hand. See `docs/design/api-keys.md`, `docs/design/api-key-permission-sets.md`, and `docs/integration-guide.md` for request shapes, supported permissions, and examples.
 
-See `docs/design/api-keys.md`, `docs/design/api-key-permission-sets.md`, and `docs/integration-guide.md` for integration details and supported permissions.
+**Operators:** no new environment variables or manual migration are required. Leaked keys are recognizable by the `cgsk_` prefix and can be revoked by the group owner.
