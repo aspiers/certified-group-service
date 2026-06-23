@@ -442,7 +442,7 @@ describe('AuthVerifier', () => {
       const key = await seedKey()
       const { credentials } = await runAuth(apiKeyReq(key.plaintext))
       expect(credentials).toMatchObject({
-        callerDid: 'did:plc:owner', // issuing owner DID
+        callerDid: 'did:plc:owner', // issuing member DID
         groupDid: GROUP,
         legacyAud: false,
         authKind: 'apiKey',
