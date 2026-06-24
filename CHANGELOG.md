@@ -1,5 +1,20 @@
 # group-service
 
+## 0.4.0
+
+### Who should read this release
+
+- **Client app developers:**
+  - [Allow all group members to create, list, and revoke their own API keys. Owners retain group-wide visibility and revocation, while API-key auth itself still cannot manage keys.](#v0.4.0-allow-all-group-members-to-create-list-and-revoke-their-own)
+
+### Minor Changes
+
+- <a id="v0.4.0-allow-all-group-members-to-create-list-and-revoke-their-own"></a> [#58](https://github.com/hypercerts-org/certified-group-service/pull/58) [`fb0e253`](https://github.com/hypercerts-org/certified-group-service/commit/fb0e253946492dee8e8718ed2ae838b79a018679) Thanks [@aspiers](https://github.com/aspiers)! - Allow all group members to create, list, and revoke their own API keys. Owners
+  retain group-wide visibility and revocation, while API-key auth itself still
+  cannot manage keys.
+
+  **Affects:** Client app developers
+
 ## 0.3.0
 
 ### Who should read this release
