@@ -46,7 +46,7 @@ CGS accepts two credential kinds. Pick before you write anything.
   window) and single-use. Almost all app flows use this, via service proxying.
 - **API key** (`X-API-Key: cgsk_…`). For a **backend daemon** that must act
   repeatedly without holding a user's signing key or re-minting a JWT every two
-  minutes — e.g. syncing membership, or a server repairing records. Owner-issued,
+  minutes — e.g. syncing membership, or a server repairing records. Member-issued,
   long-lived, scope-limited. See [API keys](#api-keys-for-backend-daemons) below.
 
 If a human is in the loop and you have their OAuth session, use the JWT path. If
@@ -261,20 +261,22 @@ Use this for "which groups am I in" UI. Details:
 
 ## API keys (for backend daemons)
 
-When a server must act without a user session, an **owner** mints an API key. A
-key is a long-lived bearer credential — store it once, send it as
+When a server must act without a user session, any **group member** can mint an
+API key for themselves. A key is a long-lived bearer credential — store it once, send it as
 `X-API-Key: cgsk_<keyRef>.<secret>` on each request. No `aud`, no nonce, no
 2-minute lifetime. It dies only when revoked.
 
-**Lifecycle (all owner-only, all authenticated with a normal owner JWT — a key
-can never manage keys):**
+**Lifecycle (JWT-authenticated; members manage their own keys, owners can list
+and revoke all keys — a key can never manage keys):**
 
-- `app.certified.group.keys.create` — `{ repo, name, scopes }`. The plaintext
-  `key` is returned **exactly once**; persist it immediately, it's never
-  retrievable again.
-- `app.certified.group.keys.list` — never returns the secret or its hash.
-- `app.certified.group.keys.delete` — soft-revoke by `keyRef`; rejected on next
-  use. Idempotent.
+- `app.certified.group.keys.create` — `{ repo, name, scopes }`. The caller can
+  only request scopes their current role can use (e.g. `audit.query` requires
+  admin). The plaintext `key` is returned **exactly once**; persist it
+  immediately, it's never retrievable again.
+- `app.certified.group.keys.list` — members see their own keys; owners see all.
+  Never returns the secret or its hash.
+- `app.certified.group.keys.delete` — soft-revoke by `keyRef`; members can revoke
+  their own keys, owners can revoke any key. Rejected on next use. Idempotent.
 
 **Scopes** (granted at create time, from `@atproto/oauth-scopes`):
 
@@ -310,7 +312,7 @@ agent:
 
 1. **Scope** — does the key's scope set cover this operation? Outside scope →
    `403`.
-2. **Role** — the key acts on behalf of the **owner that issued it**, narrowed
+2. **Role** — the key acts on behalf of the **member that issued it**, narrowed
    by its scopes. A `repo:` write key has _no own-vs-any axis_: the issuing
    role still decides whose records may be touched (a member-issued key can only
    mutate records that member authored; an admin-issued key can touch any).

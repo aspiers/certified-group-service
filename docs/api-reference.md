@@ -65,7 +65,7 @@ For the full migration walkthrough (per-method `repo` placement, direct vs proxi
 
 ## Authenticating with an API key
 
-As an alternative to a per-request service-auth JWT, an owner can issue a long-lived **API key** (see [API key management](#api-key-management)). A backend authenticates by sending the key in the `X-API-Key` header instead of `Authorization: Bearer`:
+As an alternative to a per-request service-auth JWT, any group member can issue a long-lived **API key** for themselves (see [API key management](#api-key-management)). A backend authenticates by sending the key in the `X-API-Key` header instead of `Authorization: Bearer`:
 
 ```text
 X-API-Key: cgsk_<keyRef>.<secret>
@@ -665,11 +665,11 @@ curl -X POST https://group-service.example.com/xrpc/app.certified.group.role.set
 
 ## API key management
 
-Owner-only methods for issuing and revoking [API keys](#authenticating-with-an-api-key). All three are authenticated with a normal owner **JWT** (not a key — a key can never manage keys). They target a group the same way as other group-scoped methods (`repo` in the body for the procedures, on the querystring for the `list` query).
+JWT-authenticated methods for issuing and revoking [API keys](#authenticating-with-an-api-key). Any group member can create, list, and revoke their own keys; owners can list and revoke all keys in the group. A member can only create keys with scopes their current role can use; for example, `audit.query` requires admin. A key can never manage keys. These methods target a group the same way as other group-scoped methods (`repo` in the body for the procedures, on the querystring for the `list` query).
 
 ### `POST /xrpc/app.certified.group.keys.create`
 
-Mint a key. Owner-only.
+Mint a key for the authenticated group member.
 
 Request body:
 
@@ -704,11 +704,11 @@ Response — the plaintext `key` is returned **only here**:
 }
 ```
 
-Errors: `Forbidden` (not the owner), `InvalidScope` (a scope that is unparseable, names a non-RPC method, or carries an `aud` for a different service).
+Errors: `Forbidden` (not a group member, using API-key auth, or requesting a scope above the caller's role), `InvalidScope` (a scope that is unparseable, names a non-RPC method, or carries an `aud` for a different service).
 
 ### `GET /xrpc/app.certified.group.keys.list`
 
-List the group's keys. Owner-only. Never returns the secret or its hash. Params: `repo`, `limit`, `cursor`, `includeRevoked` (default `false`).
+List keys. Members see only keys they created; owners see all keys in the group. Never returns the secret or its hash. Params: `repo`, `limit`, `cursor`, `includeRevoked` (default `false`).
 
 ```json
 {
@@ -729,7 +729,7 @@ List the group's keys. Owner-only. Never returns the secret or its hash. Params:
 
 ### `POST /xrpc/app.certified.group.keys.delete`
 
-Revoke a key (soft-delete; rejected on next use). Owner-only. Idempotent.
+Revoke a key (soft-delete; rejected on next use). Members can revoke their own keys; owners can revoke any key in the group. Idempotent.
 
 Request body: `{ "repo": "did:plc:group123", "keyRef": "ab12cd34" }`. Response: `{ "keyRef": "ab12cd34", "revokedAt": "2026-06-06T13:00:00.000Z" }`. Errors: `Forbidden`, `KeyNotFound`.
 

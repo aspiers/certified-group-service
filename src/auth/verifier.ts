@@ -83,7 +83,7 @@ export interface GroupAuthCredentials {
   scopes?: string[]
   /**
    * The non-secret key id (apiKey only), for attributing audit-log entries to a
-   * specific key rather than just the issuing owner DID.
+   * specific key rather than just the issuing member DID.
    */
   apiKeyRef?: string
 }
@@ -155,10 +155,14 @@ export class AuthVerifier {
   }
 
   private assertTokenLifetime(payload: { iat?: number; exp?: number }): void {
-    if (payload.iat == null) {
+    if (payload.iat === undefined || payload.iat === null) {
       throw new AuthRequiredError('Missing iat in service auth token')
     }
-    if (payload.exp != null && payload.exp - payload.iat > NONCE_TTL_SECONDS) {
+    if (
+      payload.exp !== undefined &&
+      payload.exp !== null &&
+      payload.exp - payload.iat > NONCE_TTL_SECONDS
+    ) {
       throw new AuthRequiredError('Token lifetime exceeds nonce window')
     }
   }
@@ -386,7 +390,7 @@ export class AuthVerifier {
       this.logApiKeyFailure('Invalid API key', {
         keyRef: parsed.keyRef,
         groupDid,
-        revoked: row?.revoked_at != null,
+        revoked: row?.revoked_at !== undefined && row.revoked_at !== null,
       })
       throw new AuthRequiredError('Invalid API key')
     }
@@ -412,8 +416,8 @@ export class AuthVerifier {
       throw new AuthRequiredError('Corrupt API-key scopes')
     }
 
-    // The key acts on behalf of its issuing owner (design Open Question lean:
-    // owner-DID + apiKeyRef for attribution). RBAC stays DID-based.
+    // The key acts on behalf of the member who created it. RBAC stays DID-based,
+    // so demotions/removals automatically cap or disable existing keys.
     return { callerDid: row.created_by, groupDid, scopes, apiKeyRef: parsed.keyRef }
   }
 

@@ -4,7 +4,7 @@ import type { Kysely } from 'kysely'
 import type { AppContext } from '../context.js'
 import type { GroupAuthResult, ServiceAuthResult } from '../auth/verifier.js'
 import type { AuditEventDetail } from '../audit.js'
-import type { Operation } from '../rbac/permissions.js'
+import type { Operation, Role } from '../rbac/permissions.js'
 import type { GroupDatabase } from '../db/schema.js'
 import { XRPCError as ClientXRPCError } from '@atproto/xrpc'
 import { XRPCError, UpstreamFailureError, ForbiddenError } from '@atproto/xrpc-server'
@@ -107,10 +107,10 @@ export function decodeCursor(cursor: string): string {
  * For an `apiKey` principal two checks must BOTH pass (design: scopes ∩
  * role-perms): first the scope check (does the key's granted scope set cover
  * this operation, delegated to `@atproto/oauth-scopes`), then the existing role
- * check (the key acts as its issuing owner, so the role check naturally caps the
+ * check (the key acts as its issuing member, so the role check naturally caps the
  * key at its issuer's role). A JWT principal is scope-unlimited — only the role
  * check applies. The specific key (`apiKeyRef`) is attached to the audit detail
- * so key-driven actions are attributable beyond the owner DID.
+ * so key-driven actions are attributable beyond the issuing member DID.
  */
 export async function assertCanWithAudit(
   ctx: AppContext,
@@ -119,7 +119,7 @@ export async function assertCanWithAudit(
   operation: Operation,
   detail?: Omit<AuditEventDetail, 'reason'>,
   principal?: GatePrincipal,
-): Promise<void> {
+): Promise<Role> {
   const auditDetail: Omit<AuditEventDetail, 'reason'> | undefined =
     principal?.authKind === 'apiKey' && principal.apiKeyRef
       ? { ...detail, apiKeyRef: principal.apiKeyRef }
@@ -155,7 +155,7 @@ export async function assertCanWithAudit(
   }
 
   try {
-    await ctx.rbac.assertCan(groupDb, callerDid, operation)
+    return await ctx.rbac.assertCan(groupDb, callerDid, operation)
   } catch (err) {
     await ctx.audit.log(groupDb, callerDid, operation, 'denied', {
       ...auditDetail,
