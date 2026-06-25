@@ -160,11 +160,20 @@ describe('MemberIndex (ATTACH DATABASE)', () => {
     did: string,
   ) =>
     (
-      await (db as any)
-        .selectFrom(table)
-        .select('role')
-        .where('member_did', '=', did)
-        .executeTakeFirst()
+      await (table === 'member_index'
+        ? // member_index spans all groups, so scope to the target group or the
+          // assertion could read an unrelated row for the same DID.
+          (db as Kysely<GlobalDatabase>)
+            .selectFrom('member_index')
+            .select('role')
+            .where('member_did', '=', did)
+            .where('group_did', '=', groupDid)
+            .executeTakeFirst()
+        : (db as Kysely<GroupDatabase>)
+            .selectFrom('group_members')
+            .select('role')
+            .where('member_did', '=', did)
+            .executeTakeFirst())
     )?.role
 
   it('transferOwner() demotes the old owner and promotes the new one in both DBs', async () => {

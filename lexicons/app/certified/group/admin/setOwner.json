@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Reassign a group's owner. Operator-only: authenticated with HTTP Basic auth (username \"admin\") against the service ADMIN_PASSWORD, not group membership. The previous owner is demoted to admin; the new owner is promoted in place if already a member, otherwise added.",
+      "description": "Reassign a group's owner. Operator-only: authenticated with HTTP Basic auth (username \"admin\") against the service ADMIN_PASSWORD, not group membership. The previous owner is demoted to admin; the new owner must already be a member and is promoted in place.",
       "input": {
         "encoding": "application/json",
         "schema": {

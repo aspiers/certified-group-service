@@ -79,12 +79,24 @@ describe('configSchema', () => {
     expect(config.adminPassword).toBeUndefined()
   })
 
-  it('accepts an adminPassword', () => {
-    const config = configSchema.parse({ ...VALID_BASE, adminPassword: 's3cret' })
-    expect(config.adminPassword).toBe('s3cret')
+  it('accepts an adminPassword of at least 16 non-whitespace chars', () => {
+    const config = configSchema.parse({ ...VALID_BASE, adminPassword: 'a-strong-secret-1234' })
+    expect(config.adminPassword).toBe('a-strong-secret-1234')
   })
 
   it('rejects an empty adminPassword', () => {
     expect(() => configSchema.parse({ ...VALID_BASE, adminPassword: '' })).toThrow()
+  })
+
+  it('rejects a too-short adminPassword', () => {
+    expect(() => configSchema.parse({ ...VALID_BASE, adminPassword: 's3cret' })).toThrow(
+      'at least 16',
+    )
+  })
+
+  it('rejects a whitespace-padded short adminPassword', () => {
+    expect(() => configSchema.parse({ ...VALID_BASE, adminPassword: '   short   ' })).toThrow(
+      'at least 16',
+    )
   })
 })

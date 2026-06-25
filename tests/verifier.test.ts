@@ -1004,9 +1004,24 @@ describe('AuthVerifier.xrpcAdminAuth', () => {
     )
   })
 
-  it('rejects credentials with no colon', () => {
+  it('rejects credentials with no colon as malformed', () => {
     const v = build(ADMIN_PASS)
     const header = 'Basic ' + Buffer.from('adminonly').toString('base64')
-    expect(run(v, { authorization: header })).toThrow('Invalid admin credentials')
+    expect(run(v, { authorization: header })).toThrow('Malformed admin credentials')
+  })
+
+  it('rejects a token with junk appended (lenient base64 decode)', () => {
+    const v = build(ADMIN_PASS)
+    // Buffer.from(_, 'base64') would otherwise drop the trailing junk and
+    // decode this to the same valid `admin:<pass>` credentials.
+    const good = Buffer.from(`admin:${ADMIN_PASS}`).toString('base64')
+    expect(run(v, { authorization: `Basic ${good}!!!!` })).toThrow('Malformed admin credentials')
+  })
+
+  it('rejects a non-base64 token', () => {
+    const v = build(ADMIN_PASS)
+    expect(run(v, { authorization: 'Basic @@@not-base64@@@' })).toThrow(
+      'Malformed admin credentials',
+    )
   })
 })

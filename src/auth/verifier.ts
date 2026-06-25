@@ -542,15 +542,23 @@ export class AuthVerifier {
     if (!header?.startsWith('Basic ')) {
       throw new AuthRequiredError('Missing admin credentials')
     }
-    let decoded: string
-    try {
-      decoded = Buffer.from(header.slice(6), 'base64').toString('utf8')
-    } catch {
+    const token = header.slice(6)
+    // Buffer.from(_, 'base64') is lenient: it ignores characters outside the
+    // base64 alphabet, so `<valid>!!!!` decodes to the same credentials as
+    // `<valid>`. Reject anything that isn't canonical base64 by re-encoding the
+    // decoded bytes and requiring an exact round-trip.
+    const decodedBuf = Buffer.from(token, 'base64')
+    if (decodedBuf.toString('base64') !== token) {
       throw new AuthRequiredError('Malformed admin credentials')
     }
+    const decoded = decodedBuf.toString('utf8')
     const sep = decoded.indexOf(':')
-    const username = sep === -1 ? decoded : decoded.slice(0, sep)
-    const password = sep === -1 ? '' : decoded.slice(sep + 1)
+    // Require an explicit `username:password` shape — no colon is malformed.
+    if (sep === -1) {
+      throw new AuthRequiredError('Malformed admin credentials')
+    }
+    const username = decoded.slice(0, sep)
+    const password = decoded.slice(sep + 1)
     // Hash both sides to a fixed 32-byte width so timingSafeEqual never sees a
     // length mismatch (which would itself leak the password length).
     const want = createHash('sha256').update(this.adminPassword).digest()

@@ -161,40 +161,46 @@ describe('admin.setOwner', () => {
     const tc = await createTestContext({
       idResolver: { handle: { resolve: async () => ADMIN } } as any,
     })
-    await seedMemberWithIndex(tc.groupDb, tc.globalDb, OWNER, GROUP, 'owner')
-    await seedMemberWithIndex(tc.groupDb, tc.globalDb, ADMIN, GROUP, 'admin')
-    const handleApp = createTestApp(tc.ctx, (server, appCtx) =>
-      adminSetOwnerHandler(server, appCtx),
-    )
+    try {
+      await seedMemberWithIndex(tc.groupDb, tc.globalDb, OWNER, GROUP, 'owner')
+      await seedMemberWithIndex(tc.groupDb, tc.globalDb, ADMIN, GROUP, 'admin')
+      const handleApp = createTestApp(tc.ctx, (server, appCtx) =>
+        adminSetOwnerHandler(server, appCtx),
+      )
 
-    const res = await request(handleApp)
-      .post(`/xrpc/${NSID}`)
-      .set('Authorization', basic('admin', TEST_ADMIN_PASSWORD))
-      .send({ repo: GROUP, newOwner: 'alice.example.com' })
+      const res = await request(handleApp)
+        .post(`/xrpc/${NSID}`)
+        .set('Authorization', basic('admin', TEST_ADMIN_PASSWORD))
+        .send({ repo: GROUP, newOwner: 'alice.example.com' })
 
-    expect(res.status).toBe(200)
-    expect(res.body.owner).toBe(ADMIN)
-    await tc.groupDb.destroy()
-    await tc.globalDb.destroy()
+      expect(res.status).toBe(200)
+      expect(res.body.owner).toBe(ADMIN)
+    } finally {
+      await tc.groupDb.destroy()
+      await tc.globalDb.destroy()
+    }
   })
 
   it('rejects an unresolvable handle newOwner', async () => {
     const tc = await createTestContext({
       idResolver: { handle: { resolve: async () => undefined } } as any,
     })
-    await seedMemberWithIndex(tc.groupDb, tc.globalDb, OWNER, GROUP, 'owner')
-    const handleApp = createTestApp(tc.ctx, (server, appCtx) =>
-      adminSetOwnerHandler(server, appCtx),
-    )
+    try {
+      await seedMemberWithIndex(tc.groupDb, tc.globalDb, OWNER, GROUP, 'owner')
+      const handleApp = createTestApp(tc.ctx, (server, appCtx) =>
+        adminSetOwnerHandler(server, appCtx),
+      )
 
-    const res = await request(handleApp)
-      .post(`/xrpc/${NSID}`)
-      .set('Authorization', basic('admin', TEST_ADMIN_PASSWORD))
-      .send({ repo: GROUP, newOwner: 'ghost.example.com' })
+      const res = await request(handleApp)
+        .post(`/xrpc/${NSID}`)
+        .set('Authorization', basic('admin', TEST_ADMIN_PASSWORD))
+        .send({ repo: GROUP, newOwner: 'ghost.example.com' })
 
-    expect(res.status).toBe(400)
-    await tc.groupDb.destroy()
-    await tc.globalDb.destroy()
+      expect(res.status).toBe(400)
+    } finally {
+      await tc.groupDb.destroy()
+      await tc.globalDb.destroy()
+    }
   })
 
   it('rejects an invalid newOwner DID', async () => {

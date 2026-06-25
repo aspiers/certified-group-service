@@ -1,8 +1,8 @@
 import type { Server } from '@atproto/xrpc-server'
-import { XRPCError } from '@atproto/xrpc-server'
+import { XRPCError, AuthRequiredError } from '@atproto/xrpc-server'
 import { ensureValidDid } from '@atproto/syntax'
 import type { AppContext } from '../../context.js'
-import { registerAdminMethod, jsonResponse, sqliteToIso } from '../util.js'
+import { registerAdminMethod, jsonResponse } from '../util.js'
 
 /**
  * app.certified.group.admin.setOwner — operator-only ownership reassignment.
@@ -72,23 +72,19 @@ export default function (server: Server, ctx: AppContext) {
         previousOwner,
       )
 
-      const updated = await groupDb
-        .selectFrom('group_members')
-        .select('added_at')
-        .where('member_did', '=', newOwnerDid)
-        .executeTakeFirstOrThrow()
-
       await ctx.audit.log(groupDb, 'admin', 'admin.setOwner', 'permitted', {
         newOwner: newOwnerDid,
         previousOwner,
       })
 
+      // updatedAt is the time of this operation, consistent with the no-op
+      // branch — not the new owner's (older) original join time.
       return jsonResponse({
         groupDid,
         owner: newOwnerDid,
         ...(previousOwner ? { previousOwner } : {}),
         noop: false,
-        updatedAt: sqliteToIso(updated.added_at),
+        updatedAt: new Date().toISOString(),
       })
     },
   })
@@ -98,8 +94,15 @@ export default function (server: Server, ctx: AppContext) {
 async function resolveGroup(ctx: AppContext, repo: string): Promise<string> {
   try {
     return await ctx.authVerifier.resolveRepoToGroup(repo)
-  } catch {
-    throw new XRPCError(404, `Unknown group: ${repo}`, 'UnknownGroup')
+  } catch (err) {
+    // resolveRepoToGroup throws AuthRequiredError specifically when the repo
+    // does not resolve to a managed group. Map only that to UnknownGroup; let
+    // unexpected failures (e.g. a transient resolver error) surface as-is so
+    // they aren't misdiagnosed as a bad group DID.
+    if (err instanceof AuthRequiredError) {
+      throw new XRPCError(404, `Unknown group: ${repo}`, 'UnknownGroup')
+    }
+    throw err
   }
 }
 
