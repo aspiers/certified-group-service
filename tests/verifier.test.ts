@@ -941,3 +941,72 @@ describe('AuthVerifier auth-failure logging', () => {
     expect(mockIdResolver.did.resolveAtprotoData).toHaveBeenCalledWith('did:plc:caller', false)
   })
 })
+
+describe('AuthVerifier.xrpcAdminAuth', () => {
+  const SERVICE_DID = 'did:web:test.example.com'
+  const ADMIN_PASS = 'super-secret-admin'
+
+  // Admin (Basic) auth needs no DB, nonce cache, or resolver — pass stubs.
+  const build = (adminPassword?: string) =>
+    new AuthVerifier(
+      {} as any,
+      {} as any,
+      {} as any,
+      SERVICE_DID,
+      {} as any,
+      undefined,
+      undefined,
+      undefined,
+      adminPassword,
+    )
+
+  const basic = (user: string, pass: string): string =>
+    'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64')
+
+  // xrpcAdminAuth's verifier is synchronous (Basic auth needs no I/O), so a
+  // rejection surfaces as a synchronous throw — assert with expect(fn).toThrow.
+  const run = (verifier: AuthVerifier, headers: Record<string, string>) => () =>
+    verifier.xrpcAdminAuth()({ req: makeReq(headers) } as any)
+
+  it('accepts admin:<password> when configured', () => {
+    const v = build(ADMIN_PASS)
+    expect(run(v, { authorization: basic('admin', ADMIN_PASS) })()).toEqual({
+      credentials: { type: 'admin' },
+    })
+  })
+
+  it('rejects every request when no admin password is configured', () => {
+    const v = build(undefined)
+    expect(run(v, { authorization: basic('admin', 'anything') })).toThrow(
+      'Admin endpoints are disabled',
+    )
+  })
+
+  it('rejects a missing Authorization header', () => {
+    const v = build(ADMIN_PASS)
+    expect(run(v, {})).toThrow('Missing admin credentials')
+  })
+
+  it('rejects a non-Basic scheme', () => {
+    const v = build(ADMIN_PASS)
+    expect(run(v, { authorization: 'Bearer xyz' })).toThrow('Missing admin')
+  })
+
+  it('rejects the wrong password', () => {
+    const v = build(ADMIN_PASS)
+    expect(run(v, { authorization: basic('admin', 'nope') })).toThrow('Invalid admin credentials')
+  })
+
+  it('rejects the wrong username', () => {
+    const v = build(ADMIN_PASS)
+    expect(run(v, { authorization: basic('root', ADMIN_PASS) })).toThrow(
+      'Invalid admin credentials',
+    )
+  })
+
+  it('rejects credentials with no colon', () => {
+    const v = build(ADMIN_PASS)
+    const header = 'Basic ' + Buffer.from('adminonly').toString('base64')
+    expect(run(v, { authorization: header })).toThrow('Invalid admin credentials')
+  })
+})

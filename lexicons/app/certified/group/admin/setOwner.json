@@ -1,0 +1,58 @@
+{
+  "lexicon": 1,
+  "id": "app.certified.group.admin.setOwner",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Reassign a group's owner. Operator-only: authenticated with HTTP Basic auth (username \"admin\") against the service ADMIN_PASSWORD, not group membership. The previous owner is demoted to admin; the new owner is promoted in place if already a member, otherwise added.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["repo", "newOwner"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "format": "at-identifier",
+              "description": "The handle or DID of the target group."
+            },
+            "newOwner": {
+              "type": "string",
+              "format": "at-identifier",
+              "description": "The handle or DID of the member to make owner."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["groupDid", "owner", "updatedAt"],
+          "properties": {
+            "groupDid": { "type": "string", "format": "did" },
+            "owner": { "type": "string", "format": "did" },
+            "previousOwner": {
+              "type": "string",
+              "format": "did",
+              "description": "The DID demoted from owner to admin, if there was one."
+            },
+            "noop": {
+              "type": "boolean",
+              "description": "True when newOwner was already the owner and nothing changed."
+            },
+            "updatedAt": { "type": "string", "format": "datetime" }
+          }
+        }
+      },
+      "errors": [
+        { "name": "Unauthorized" },
+        { "name": "UnknownGroup", "description": "The repo does not resolve to a managed group." },
+        {
+          "name": "MemberNotFound",
+          "description": "newOwner resolves to a DID that is not a member of the group."
+        }
+      ]
+    }
+  }
+}

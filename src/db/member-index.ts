@@ -18,6 +18,19 @@ export interface MemberIndexWriter {
     memberDid: string,
     newRole: string,
   ): void
+  /**
+   * Atomically reassign ownership: demote `previousOwnerDid` (if any) to admin
+   * and promote `newOwnerDid` to owner, in a single transaction across both the
+   * per-group and global DBs. `newOwnerDid` must already be a member. Used by
+   * the admin `setOwner` endpoint, where leaving a window with two owners or no
+   * owner would be incorrect.
+   */
+  transferOwner(
+    groupRaw: Database.Database,
+    groupDid: string,
+    newOwnerDid: string,
+    previousOwnerDid: string | null,
+  ): void
 }
 
 /** Production: uses ATTACH DATABASE for atomic cross-DB writes. */
@@ -68,6 +81,26 @@ export class MemberIndex implements MemberIndexWriter {
           `UPDATE global_db.member_index SET role = ? WHERE member_did = ? AND group_did = ?`,
         )
         .run(newRole, memberDid, groupDid)
+    })
+  }
+
+  transferOwner(
+    groupRaw: Database.Database,
+    groupDid: string,
+    newOwnerDid: string,
+    previousOwnerDid: string | null,
+  ): void {
+    this.withGlobalAttached(groupRaw, (raw) => {
+      const setRole = (memberDid: string, role: string): void => {
+        raw.prepare(`UPDATE group_members SET role = ? WHERE member_did = ?`).run(role, memberDid)
+        raw
+          .prepare(
+            `UPDATE global_db.member_index SET role = ? WHERE member_did = ? AND group_did = ?`,
+          )
+          .run(role, memberDid, groupDid)
+      }
+      if (previousOwnerDid && previousOwnerDid !== newOwnerDid) setRole(previousOwnerDid, 'admin')
+      setRole(newOwnerDid, 'owner')
     })
   }
 
@@ -127,6 +160,18 @@ export class TestMemberIndex implements MemberIndexWriter {
     this.globalRaw
       .prepare(`UPDATE member_index SET role = ? WHERE member_did = ? AND group_did = ?`)
       .run(newRole, memberDid, groupDid)
+  }
+
+  transferOwner(
+    groupRaw: Database.Database,
+    groupDid: string,
+    newOwnerDid: string,
+    previousOwnerDid: string | null,
+  ): void {
+    if (previousOwnerDid && previousOwnerDid !== newOwnerDid) {
+      this.updateRole(groupRaw, groupDid, previousOwnerDid, 'admin')
+    }
+    this.updateRole(groupRaw, groupDid, newOwnerDid, 'owner')
   }
 }
 

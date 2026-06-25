@@ -2,7 +2,7 @@ import type { Server, MethodHandler, RouteOptions } from '@atproto/xrpc-server'
 import type { Response as ExpressResponse } from 'express'
 import type { Kysely } from 'kysely'
 import type { AppContext } from '../context.js'
-import type { GroupAuthResult, ServiceAuthResult } from '../auth/verifier.js'
+import type { GroupAuthResult, ServiceAuthResult, AdminAuthResult } from '../auth/verifier.js'
 import type { AuditEventDetail } from '../audit.js'
 import type { Operation, Role } from '../rbac/permissions.js'
 import type { GroupDatabase } from '../db/schema.js'
@@ -35,6 +35,11 @@ export interface AuthedMethodConfig {
 export interface ServiceAuthMethodConfig {
   opts?: RouteOptions
   handler: MethodHandler<ServiceAuthResult>
+}
+
+export interface AdminMethodConfig {
+  opts?: RouteOptions
+  handler: MethodHandler<AdminAuthResult>
 }
 
 export function jsonResponse<T>(body: T) {
@@ -303,6 +308,27 @@ export function registerServiceAuthMethod(
 ): void {
   server.method(nsid, {
     auth: ctx.authVerifier.xrpcServiceAuth(),
+    opts: config.opts,
+    handler: config.handler,
+  })
+}
+
+/**
+ * Register an operator-authenticated admin XRPC method (the `*.admin.*`
+ * namespace), gated by HTTP Basic auth against `ADMIN_PASSWORD` rather than any
+ * group membership or DID — the same model as `com.atproto.admin.*` on a PDS.
+ * The endpoint is disabled when no admin password is configured. The handler
+ * receives no caller identity (the credential is just `{ type: 'admin' }`); it
+ * is fully trusted and must validate its own inputs.
+ */
+export function registerAdminMethod(
+  server: Server,
+  nsid: string,
+  ctx: AppContext,
+  config: AdminMethodConfig,
+): void {
+  server.method(nsid, {
+    auth: ctx.authVerifier.xrpcAdminAuth(),
     opts: config.opts,
     handler: config.handler,
   })

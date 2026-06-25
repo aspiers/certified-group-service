@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { IdResolver } from '@atproto/identity'
 import {
   AuthRequiredError,
@@ -94,10 +95,22 @@ export interface ServiceAuthCredentials {
 }
 export type ServiceAuthResult = { credentials: ServiceAuthCredentials }
 
+/**
+ * Credentials for an operator-authenticated admin endpoint. The caller is not a
+ * group member or a DID — they proved knowledge of the service admin password
+ * via HTTP Basic auth, mirroring `com.atproto.admin.*` on a PDS.
+ */
+export interface AdminAuthCredentials {
+  type: 'admin'
+}
+export type AdminAuthResult = { credentials: AdminAuthCredentials }
+
 export class AuthVerifier {
   private verifyJwtFn: typeof defaultVerifyJwt
   private parseReqNsidFn: typeof defaultParseReqNsid
   private logger?: Logger
+
+  private adminPassword?: string
 
   constructor(
     private idResolver: IdResolver,
@@ -108,10 +121,12 @@ export class AuthVerifier {
     verifyJwtFn?: typeof defaultVerifyJwt,
     parseReqNsidFn?: typeof defaultParseReqNsid,
     logger?: Logger,
+    adminPassword?: string,
   ) {
     this.verifyJwtFn = verifyJwtFn ?? defaultVerifyJwt
     this.parseReqNsidFn = parseReqNsidFn ?? defaultParseReqNsid
     this.logger = logger
+    this.adminPassword = adminPassword
   }
 
   /**
@@ -506,6 +521,50 @@ export class AuthVerifier {
       return {
         credentials: { callerDid: iss },
       }
+    }
+  }
+
+  /**
+   * Verify HTTP Basic auth against the configured admin password, mirroring
+   * `com.atproto.admin.*` on a PDS: the username must be `admin` and the
+   * password must equal `ADMIN_PASSWORD`. If no admin password is configured the
+   * endpoint is disabled entirely (every request is rejected), so admin methods
+   * are unreachable unless an operator opts in.
+   *
+   * The comparison is constant-time over fixed-length SHA-256 digests, so it
+   * leaks neither the password value nor its length via timing.
+   */
+  private verifyAdmin(req: Request): void {
+    if (!this.adminPassword) {
+      throw new AuthRequiredError('Admin endpoints are disabled (no ADMIN_PASSWORD configured)')
+    }
+    const header = req.headers.authorization
+    if (!header?.startsWith('Basic ')) {
+      throw new AuthRequiredError('Missing admin credentials')
+    }
+    let decoded: string
+    try {
+      decoded = Buffer.from(header.slice(6), 'base64').toString('utf8')
+    } catch {
+      throw new AuthRequiredError('Malformed admin credentials')
+    }
+    const sep = decoded.indexOf(':')
+    const username = sep === -1 ? decoded : decoded.slice(0, sep)
+    const password = sep === -1 ? '' : decoded.slice(sep + 1)
+    // Hash both sides to a fixed 32-byte width so timingSafeEqual never sees a
+    // length mismatch (which would itself leak the password length).
+    const want = createHash('sha256').update(this.adminPassword).digest()
+    const got = createHash('sha256').update(password).digest()
+    if (username !== 'admin' || !timingSafeEqual(want, got)) {
+      this.logger?.warn({ reason: 'Bad admin credentials' }, 'Auth verification failed')
+      throw new AuthRequiredError('Invalid admin credentials')
+    }
+  }
+
+  xrpcAdminAuth(): MethodAuthVerifier<AdminAuthResult> {
+    return ({ req }) => {
+      this.verifyAdmin(req)
+      return { credentials: { type: 'admin' } }
     }
   }
 }

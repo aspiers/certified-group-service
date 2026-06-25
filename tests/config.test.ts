@@ -73,4 +73,18 @@ describe('configSchema', () => {
     const { groupPdsUrl, ...rest } = VALID_BASE
     expect(() => configSchema.parse(rest)).toThrow()
   })
+
+  it('leaves adminPassword undefined by default', () => {
+    const config = configSchema.parse(VALID_BASE)
+    expect(config.adminPassword).toBeUndefined()
+  })
+
+  it('accepts an adminPassword', () => {
+    const config = configSchema.parse({ ...VALID_BASE, adminPassword: 's3cret' })
+    expect(config.adminPassword).toBe('s3cret')
+  })
+
+  it('rejects an empty adminPassword', () => {
+    expect(() => configSchema.parse({ ...VALID_BASE, adminPassword: '' })).toThrow()
+  })
 })

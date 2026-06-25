@@ -1,0 +1,121 @@
+import type { Server } from '@atproto/xrpc-server'
+import { XRPCError } from '@atproto/xrpc-server'
+import { ensureValidDid } from '@atproto/syntax'
+import type { AppContext } from '../../context.js'
+import { registerAdminMethod, jsonResponse, sqliteToIso } from '../util.js'
+
+/**
+ * app.certified.group.admin.setOwner — operator-only ownership reassignment.
+ *
+ * Authenticated by HTTP Basic auth against ADMIN_PASSWORD (see
+ * registerAdminMethod), NOT group membership. This is the in-process equivalent
+ * of the former direct-DB script: because it writes through the same
+ * GroupDbPool connection the read paths use, the change is visible immediately —
+ * no service restart required.
+ *
+ * The previous owner (if any) is demoted to admin; the new owner is promoted to
+ * owner. The new owner must already be a member — unlike a self-service role
+ * change, but creating membership as a side effect of an ownership transfer
+ * would be surprising for an admin tool, so we require it explicitly.
+ */
+export default function (server: Server, ctx: AppContext) {
+  registerAdminMethod(server, 'app.certified.group.admin.setOwner', ctx, {
+    handler: async ({ input }) => {
+      const { repo, newOwner } = input?.body as { repo: string; newOwner: string }
+
+      // Resolve the group (validates it is a managed group) and the new owner's
+      // DID (handle → DID via the resolver) in parallel.
+      const [groupDid, newOwnerDid] = await Promise.all([
+        resolveGroup(ctx, repo),
+        resolveNewOwner(ctx, newOwner),
+      ])
+
+      const groupDb = ctx.groupDbs.get(groupDid)
+
+      const [currentOwner, target] = await Promise.all([
+        groupDb
+          .selectFrom('group_members')
+          .select('member_did')
+          .where('role', '=', 'owner')
+          .executeTakeFirst(),
+        groupDb
+          .selectFrom('group_members')
+          .select('role')
+          .where('member_did', '=', newOwnerDid)
+          .executeTakeFirst(),
+      ])
+
+      if (!target) {
+        throw new XRPCError(404, `${newOwnerDid} is not a member of the group`, 'MemberNotFound')
+      }
+
+      // Already the owner — nothing to do. Report it rather than churn the DB.
+      if (currentOwner?.member_did === newOwnerDid) {
+        await ctx.audit.log(groupDb, 'admin', 'admin.setOwner', 'permitted', {
+          newOwner: newOwnerDid,
+          previousOwner: newOwnerDid,
+          noop: true,
+        })
+        return jsonResponse({
+          groupDid,
+          owner: newOwnerDid,
+          noop: true,
+          updatedAt: new Date().toISOString(),
+        })
+      }
+
+      const previousOwner = currentOwner?.member_did ?? null
+      ctx.memberIndex.transferOwner(
+        ctx.groupDbs.getRaw(groupDid),
+        groupDid,
+        newOwnerDid,
+        previousOwner,
+      )
+
+      const updated = await groupDb
+        .selectFrom('group_members')
+        .select('added_at')
+        .where('member_did', '=', newOwnerDid)
+        .executeTakeFirstOrThrow()
+
+      await ctx.audit.log(groupDb, 'admin', 'admin.setOwner', 'permitted', {
+        newOwner: newOwnerDid,
+        previousOwner,
+      })
+
+      return jsonResponse({
+        groupDid,
+        owner: newOwnerDid,
+        ...(previousOwner ? { previousOwner } : {}),
+        noop: false,
+        updatedAt: sqliteToIso(updated.added_at),
+      })
+    },
+  })
+}
+
+/** Resolve the `repo` at-identifier to a known group DID. */
+async function resolveGroup(ctx: AppContext, repo: string): Promise<string> {
+  try {
+    return await ctx.authVerifier.resolveRepoToGroup(repo)
+  } catch {
+    throw new XRPCError(404, `Unknown group: ${repo}`, 'UnknownGroup')
+  }
+}
+
+/** Resolve the `newOwner` at-identifier (handle or DID) to a DID. */
+async function resolveNewOwner(ctx: AppContext, newOwner: string): Promise<string> {
+  if (newOwner.startsWith('did:')) {
+    try {
+      ensureValidDid(newOwner)
+    } catch {
+      throw new XRPCError(400, `Invalid newOwner DID: ${newOwner}`, 'InvalidRequest')
+    }
+    return newOwner
+  }
+  const did = await ctx.idResolver.handle.resolve(newOwner)
+  if (!did) {
+    throw new XRPCError(400, `Could not resolve newOwner handle: ${newOwner}`, 'InvalidRequest')
+  }
+  return did
+}
