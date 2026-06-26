@@ -17,7 +17,7 @@ export const configSchema = z
       .string()
       .refine(
         (v) => v.trim().length >= 16,
-        'ADMIN_PASSWORD must be at least 16 non-whitespace characters',
+        'CGS_ADMIN_PASSWORD must be at least 16 non-whitespace characters',
       )
       .optional(),
     plcUrl: z.string().url().default('https://plc.directory'),
@@ -45,7 +45,7 @@ export function loadConfig(): Config {
     serviceDid: env.SERVICE_DID,
     groupPdsUrl: env.GROUP_PDS_URL,
     groupPdsInviteCode: env.GROUP_PDS_INVITE_CODE,
-    adminPassword: env.ADMIN_PASSWORD,
+    adminPassword: env.CGS_ADMIN_PASSWORD,
     plcUrl: env.PLC_URL,
     didCacheTtlMs: env.DID_CACHE_TTL_MS,
     maxBlobSize: env.MAX_BLOB_SIZE,

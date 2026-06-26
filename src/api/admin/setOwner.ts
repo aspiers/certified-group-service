@@ -7,7 +7,7 @@ import { registerAdminMethod, jsonResponse } from '../util.js'
 /**
  * app.certified.group.admin.setOwner — operator-only ownership reassignment.
  *
- * Authenticated by HTTP Basic auth against ADMIN_PASSWORD (see
+ * Authenticated by HTTP Basic auth against CGS_ADMIN_PASSWORD (see
  * registerAdminMethod), NOT group membership. This is the in-process equivalent
  * of the former direct-DB script: because it writes through the same
  * GroupDbPool connection the read paths use, the change is visible immediately —

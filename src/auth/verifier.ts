@@ -527,7 +527,7 @@ export class AuthVerifier {
   /**
    * Verify HTTP Basic auth against the configured admin password, mirroring
    * `com.atproto.admin.*` on a PDS: the username must be `admin` and the
-   * password must equal `ADMIN_PASSWORD`. If no admin password is configured the
+   * password must equal `CGS_ADMIN_PASSWORD`. If no admin password is configured the
    * endpoint is disabled entirely (every request is rejected), so admin methods
    * are unreachable unless an operator opts in.
    *
@@ -536,7 +536,7 @@ export class AuthVerifier {
    */
   private verifyAdmin(req: Request): void {
     if (!this.adminPassword) {
-      throw new AuthRequiredError('Admin endpoints are disabled (no ADMIN_PASSWORD configured)')
+      throw new AuthRequiredError('Admin endpoints are disabled (no CGS_ADMIN_PASSWORD configured)')
     }
     const header = req.headers.authorization
     if (!header?.startsWith('Basic ')) {

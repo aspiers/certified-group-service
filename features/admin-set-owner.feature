@@ -3,7 +3,7 @@ Feature: Admin setOwner (operator-only)
 
   The app.certified.group.admin.setOwner endpoint reassigns a group's owner. It
   is operator-only: authenticated with HTTP Basic auth (username "admin") against
-  the service ADMIN_PASSWORD, NOT a member's service-auth JWT. This feature runs
+  the service CGS_ADMIN_PASSWORD, NOT a member's service-auth JWT. This feature runs
   only when both the RBAC accounts and the CGS service admin password
   (CGS_ADMIN_PASSWORD) are configured.
 

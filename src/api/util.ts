@@ -315,7 +315,7 @@ export function registerServiceAuthMethod(
 
 /**
  * Register an operator-authenticated admin XRPC method (the `*.admin.*`
- * namespace), gated by HTTP Basic auth against `ADMIN_PASSWORD` rather than any
+ * namespace), gated by HTTP Basic auth against `CGS_ADMIN_PASSWORD` rather than any
  * group membership or DID — the same model as `com.atproto.admin.*` on a PDS.
  * The endpoint is disabled when no admin password is configured. The handler
  * receives no caller identity (the credential is just `{ type: 'admin' }`); it

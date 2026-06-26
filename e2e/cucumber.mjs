@@ -10,7 +10,7 @@
 //
 // The importer and owner accounts are required config — a real run always has
 // them — so import/records/reporting are not tag-gated. Only the @health
-// feature works with just CGS_URL.
+// feature works with just E2E_CGS_URL.
 import { config } from 'dotenv'
 import { resolve } from 'node:path'
 
@@ -21,16 +21,17 @@ import { resolve } from 'node:path'
 config({ path: resolve('e2e/.env') })
 
 const rbacAccountsConfigured = Boolean(
-  process.env.ADMIN_IDENTIFIER &&
-  process.env.ADMIN_PASSWORD &&
-  process.env.MEMBER_IDENTIFIER &&
-  process.env.MEMBER_PASSWORD &&
-  process.env.OUTSIDER_IDENTIFIER &&
-  process.env.OUTSIDER_PASSWORD,
+  process.env.E2E_GROUP_ADMIN_IDENTIFIER &&
+  process.env.E2E_GROUP_ADMIN_PASSWORD &&
+  process.env.E2E_GROUP_MEMBER_IDENTIFIER &&
+  process.env.E2E_GROUP_MEMBER_PASSWORD &&
+  process.env.E2E_GROUP_OUTSIDER_IDENTIFIER &&
+  process.env.E2E_GROUP_OUTSIDER_PASSWORD,
 )
 
 // The CGS *service* admin password (CGS_ADMIN_PASSWORD) gates the @needs-cgs-admin
-// admin-endpoint feature. Distinct from ADMIN_PASSWORD (an account password above).
+// admin-endpoint feature. This is a service-wide credential, distinct from the
+// per-test-group role accounts (E2E_GROUP_*) above.
 const cgsAdminConfigured = Boolean(process.env.CGS_ADMIN_PASSWORD)
 
 const tagExclusions = [

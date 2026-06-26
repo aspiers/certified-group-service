@@ -30,8 +30,8 @@ The container expects a volume mounted at `/app/data` for database persistence.
 
 CGS exposes operator-only admin endpoints under `app.certified.group.admin.*`
 (currently `setOwner`, which reassigns a group's owner). They are gated by
-**HTTP Basic auth** — username `admin`, password the `ADMIN_PASSWORD`
-environment variable — and are **disabled entirely when `ADMIN_PASSWORD` is
+**HTTP Basic auth** — username `admin`, password the `CGS_ADMIN_PASSWORD`
+environment variable — and are **disabled entirely when `CGS_ADMIN_PASSWORD` is
 unset** (every request returns `401`; there is no insecure default). When set,
 the password must be at least 16 non-whitespace characters.
 
@@ -47,7 +47,7 @@ ownership change via `setOwner` — is recorded in the target group's audit log,
 attributed to actor `admin`, so its use is transparent and reviewable by the
 group.
 
-Treat `ADMIN_PASSWORD` like any other high-value secret: set it only if you need
+Treat `CGS_ADMIN_PASSWORD` like any other high-value secret: set it only if you need
 the admin endpoints, store it in your platform's secret store (not in the
 repo), and rotate it if exposed. See the [Admin operations](api-reference.md#admin-operations)
 section of the API reference for the endpoint contracts.
