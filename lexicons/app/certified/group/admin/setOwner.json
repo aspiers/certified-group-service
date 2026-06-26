@@ -51,6 +51,10 @@
       },
       "errors": [
         { "name": "Unauthorized" },
+        {
+          "name": "InvalidRequest",
+          "description": "newOwner is a malformed DID or an unresolvable handle."
+        },
         { "name": "UnknownGroup", "description": "The repo does not resolve to a managed group." }
       ]
     }

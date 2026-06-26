@@ -95,6 +95,11 @@ export class MemberIndex implements MemberIndexWriter {
     newOwnerDid: string,
     previousOwnerDid: string | null,
   ): void {
+    // withGlobalAttached runs this callback inside a single SQLite transaction
+    // (groupRaw.transaction(...)), so the demote and the promote/insert below
+    // commit together or not at all. A crash partway through rolls the whole
+    // thing back — the group is never left with the old owner demoted to admin
+    // but no new owner installed.
     this.withGlobalAttached(groupRaw, (raw) => {
       const setRole = (memberDid: string, role: string): void => {
         raw.prepare(`UPDATE group_members SET role = ? WHERE member_did = ?`).run(role, memberDid)
