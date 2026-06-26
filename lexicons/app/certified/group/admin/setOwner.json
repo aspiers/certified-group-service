@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Reassign a group's owner. Operator-only: authenticated with HTTP Basic auth (username \"admin\") against the service ADMIN_PASSWORD, not group membership. The previous owner is demoted to admin; the new owner must already be a member and is promoted in place.",
+      "description": "Reassign a group's owner. Operator-only: authenticated with HTTP Basic auth (username \"admin\") against the service ADMIN_PASSWORD, not group membership. The previous owner is demoted to admin. The new owner is promoted in place if already a member, or added as a new owner member if not — supporting operator recovery when the incumbent owner is unavailable.",
       "input": {
         "encoding": "application/json",
         "schema": {
@@ -41,17 +41,17 @@
               "type": "boolean",
               "description": "True when newOwner was already the owner and nothing changed."
             },
+            "addedAsMember": {
+              "type": "boolean",
+              "description": "True when newOwner was not previously a member and was added as a new owner member."
+            },
             "updatedAt": { "type": "string", "format": "datetime" }
           }
         }
       },
       "errors": [
         { "name": "Unauthorized" },
-        { "name": "UnknownGroup", "description": "The repo does not resolve to a managed group." },
-        {
-          "name": "MemberNotFound",
-          "description": "newOwner resolves to a DID that is not a member of the group."
-        }
+        { "name": "UnknownGroup", "description": "The repo does not resolve to a managed group." }
       ]
     }
   }

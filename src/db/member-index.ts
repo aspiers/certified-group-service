@@ -3,6 +3,9 @@ import type { Kysely } from 'kysely'
 import type { GlobalDatabase } from './schema.js'
 import type { GroupDbPool } from './group-db-pool.js'
 
+/** `added_by` attribution for an owner installed via the admin setOwner endpoint. */
+const OWNER_ADDED_BY = 'admin:setOwner'
+
 export interface MemberIndexWriter {
   add(
     groupRaw: Database.Database,
@@ -20,10 +23,12 @@ export interface MemberIndexWriter {
   ): void
   /**
    * Atomically reassign ownership: demote `previousOwnerDid` (if any) to admin
-   * and promote `newOwnerDid` to owner, in a single transaction across both the
-   * per-group and global DBs. `newOwnerDid` must already be a member. Used by
-   * the admin `setOwner` endpoint, where leaving a window with two owners or no
-   * owner would be incorrect.
+   * and make `newOwnerDid` the owner, in a single transaction across both the
+   * per-group and global DBs. If `newOwnerDid` is already a member they are
+   * promoted in place; otherwise they are inserted as a new owner member (the
+   * operator break-glass case, where the new owner need not already belong to
+   * the group). Used by the admin `setOwner` endpoint, where leaving a window
+   * with two owners or no owner would be incorrect.
    */
   transferOwner(
     groupRaw: Database.Database,
@@ -100,7 +105,27 @@ export class MemberIndex implements MemberIndexWriter {
           .run(role, memberDid, groupDid)
       }
       if (previousOwnerDid && previousOwnerDid !== newOwnerDid) setRole(previousOwnerDid, 'admin')
-      setRole(newOwnerDid, 'owner')
+
+      // The new owner may not yet be a member (operator break-glass). Insert
+      // them as owner in that case; otherwise promote the existing row.
+      const exists = raw
+        .prepare(`SELECT 1 FROM group_members WHERE member_did = ?`)
+        .get(newOwnerDid)
+      if (exists) {
+        setRole(newOwnerDid, 'owner')
+      } else {
+        raw
+          .prepare(`INSERT INTO group_members (member_did, role, added_by) VALUES (?, 'owner', ?)`)
+          .run(newOwnerDid, OWNER_ADDED_BY)
+        const { added_at } = raw
+          .prepare(`SELECT added_at FROM group_members WHERE member_did = ?`)
+          .get(newOwnerDid) as { added_at: string }
+        raw
+          .prepare(
+            `INSERT INTO global_db.member_index (member_did, group_did, role, added_by, added_at) VALUES (?, ?, 'owner', ?, ?)`,
+          )
+          .run(newOwnerDid, groupDid, OWNER_ADDED_BY, added_at)
+      }
     })
   }
 
@@ -171,7 +196,14 @@ export class TestMemberIndex implements MemberIndexWriter {
     if (previousOwnerDid && previousOwnerDid !== newOwnerDid) {
       this.updateRole(groupRaw, groupDid, previousOwnerDid, 'admin')
     }
-    this.updateRole(groupRaw, groupDid, newOwnerDid, 'owner')
+    const exists = groupRaw
+      .prepare(`SELECT 1 FROM group_members WHERE member_did = ?`)
+      .get(newOwnerDid)
+    if (exists) {
+      this.updateRole(groupRaw, groupDid, newOwnerDid, 'owner')
+    } else {
+      this.add(groupRaw, groupDid, newOwnerDid, 'owner', OWNER_ADDED_BY)
+    }
   }
 }
 

@@ -108,16 +108,35 @@ describe('admin.setOwner', () => {
     expect(await roleOf(groupDb, OWNER)).toBe('owner')
   })
 
-  it('rejects a newOwner that is not a member with MemberNotFound', async () => {
+  it('adds a non-member newOwner as owner (operator break-glass) and demotes the old owner', async () => {
+    const STRANGER = 'did:plc:strangerxxxxxxxxxxxxxx'
     const res = await request(app)
       .post(`/xrpc/${NSID}`)
       .set('Authorization', basic('admin', TEST_ADMIN_PASSWORD))
-      .send({ repo: GROUP, newOwner: 'did:plc:strangerxxxxxxxxxxxxxx' })
+      .send({ repo: GROUP, newOwner: STRANGER })
 
-    expect(res.status).toBe(404)
-    expect(res.body.error).toBe('MemberNotFound')
-    // Unchanged.
-    expect(await roleOf(groupDb, OWNER)).toBe('owner')
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({
+      owner: STRANGER,
+      previousOwner: OWNER,
+      addedAsMember: true,
+      noop: false,
+    })
+    // The stranger is now an owner member in both DBs; old owner demoted.
+    expect(await roleOf(groupDb, STRANGER)).toBe('owner')
+    expect(await indexRoleOf(STRANGER)).toBe('owner')
+    expect(await roleOf(groupDb, OWNER)).toBe('admin')
+    expect(await indexRoleOf(OWNER)).toBe('admin')
+  })
+
+  it('reports addedAsMember=false when promoting an existing member', async () => {
+    const res = await request(app)
+      .post(`/xrpc/${NSID}`)
+      .set('Authorization', basic('admin', TEST_ADMIN_PASSWORD))
+      .send({ repo: GROUP, newOwner: ADMIN })
+
+    expect(res.status).toBe(200)
+    expect(res.body.addedAsMember).toBe(false)
   })
 
   it('rejects an unknown group with UnknownGroup', async () => {
@@ -210,5 +229,29 @@ describe('admin.setOwner', () => {
       .send({ repo: GROUP, newOwner: 'did:invalid' })
 
     expect(res.status).toBe(400)
+  })
+
+  it('does not mask an unexpected repo-resolution failure as UnknownGroup', async () => {
+    // A non-AuthRequiredError from resolveRepoToGroup (e.g. a transient resolver
+    // failure) must surface as a 5xx, not be misreported as a 404 UnknownGroup.
+    const tc = await createTestContext()
+    tc.ctx.authVerifier.resolveRepoToGroup = async () => {
+      throw new Error('resolver exploded')
+    }
+    try {
+      const failApp = createTestApp(tc.ctx, (server, appCtx) =>
+        adminSetOwnerHandler(server, appCtx),
+      )
+      const res = await request(failApp)
+        .post(`/xrpc/${NSID}`)
+        .set('Authorization', basic('admin', TEST_ADMIN_PASSWORD))
+        .send({ repo: GROUP, newOwner: ADMIN })
+
+      expect(res.status).toBeGreaterThanOrEqual(500)
+      expect(res.body.error).not.toBe('UnknownGroup')
+    } finally {
+      await tc.groupDb.destroy()
+      await tc.globalDb.destroy()
+    }
   })
 })

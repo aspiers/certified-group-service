@@ -45,10 +45,6 @@ export default function (server: Server, ctx: AppContext) {
           .executeTakeFirst(),
       ])
 
-      if (!target) {
-        throw new XRPCError(404, `${newOwnerDid} is not a member of the group`, 'MemberNotFound')
-      }
-
       // Already the owner — nothing to do. Report it rather than churn the DB.
       if (currentOwner?.member_did === newOwnerDid) {
         await ctx.audit.log(groupDb, 'admin', 'admin.setOwner', 'permitted', {
@@ -64,6 +60,12 @@ export default function (server: Server, ctx: AppContext) {
         })
       }
 
+      // The new owner need NOT already be a member: this is an operator
+      // break-glass endpoint, used precisely when the incumbent owner/admin is
+      // unavailable (lost keys, incapacitated) and a fresh owner must be
+      // installed. If they aren't a member, add them as owner; otherwise promote
+      // in place. Either way the previous owner (if any) is demoted to admin.
+      const addedAsMember = !target
       const previousOwner = currentOwner?.member_did ?? null
       ctx.memberIndex.transferOwner(
         ctx.groupDbs.getRaw(groupDid),
@@ -75,6 +77,7 @@ export default function (server: Server, ctx: AppContext) {
       await ctx.audit.log(groupDb, 'admin', 'admin.setOwner', 'permitted', {
         newOwner: newOwnerDid,
         previousOwner,
+        addedAsMember,
       })
 
       // updatedAt is the time of this operation, consistent with the no-op
@@ -83,6 +86,7 @@ export default function (server: Server, ctx: AppContext) {
         groupDid,
         owner: newOwnerDid,
         ...(previousOwner ? { previousOwner } : {}),
+        addedAsMember,
         noop: false,
         updatedAt: new Date().toISOString(),
       })
