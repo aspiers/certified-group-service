@@ -395,14 +395,15 @@ jobs:
           E2E_GROUP_MEMBER_PASSWORD: ${{ secrets.E2E_GROUP_MEMBER_PASSWORD }}
           E2E_GROUP_OUTSIDER_IDENTIFIER: ${{ vars.E2E_GROUP_OUTSIDER_IDENTIFIER }}
           E2E_GROUP_OUTSIDER_PASSWORD: ${{ secrets.E2E_GROUP_OUTSIDER_PASSWORD }}
-          # CGS_ADMIN_PASSWORD (the @needs-cgs-admin admin-set-owner feature) is
-          # intentionally NOT set here: the e2e job runs against the deployed
-          # preview, and Railway gates the deploy on CI passing. A PR that adds
-          # or changes the admin endpoint would run its new e2e against the OLD
-          # preview (no endpoint yet) and deadlock its own deploy. Leaving this
-          # unset auto-excludes the feature; enable it in a follow-up once the
-          # endpoint is already live (set CGS_ADMIN_PASSWORD on the deployed CGS
-          # env, and add a matching secret here).
+          # CGS_ADMIN_PASSWORD gates the @needs-cgs-admin admin-set-owner feature.
+          # It is not set here yet, so that feature is excluded (cucumber.mjs
+          # announces the exclusion at startup). To run it in CI: set this as a
+          # repo secret AND set CGS_ADMIN_PASSWORD on the preview deployment to
+          # the same value (the suite authenticates against the live preview, so
+          # the two must match). The per-SHA preview already contains the
+          # endpoint, so there is no chicken-and-egg problem — the feature just
+          # needs a credential to run with.
+          # CGS_ADMIN_PASSWORD: ${{ secrets.CGS_ADMIN_PASSWORD }}
         run: |
           # The importer/owner accounts are required for the authenticated suite,
           # but unlike the RBAC accounts they are not tag-gated — without them
