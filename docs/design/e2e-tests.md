@@ -105,6 +105,7 @@ features/                      # Gherkin .feature files at repo root
   records.feature             # repo.createRecord/putRecord/uploadBlob/deleteRecord
   membership.feature          # RBAC across roles: member.*, role.set + positive/negative authz
   reporting.feature           # audit.query, membership.list
+  admin-set-owner.feature     # admin.setOwner (HTTP Basic auth) — @needs-cgs-admin
 e2e/
   cucumber.mjs                 # profiles + env-driven tag exclusions
   tsconfig.e2e.json
@@ -123,7 +124,26 @@ e2e/
     register.steps.ts          # group.register assertions (@manual)
     records.steps.ts           # repo.createRecord/putRecord/uploadBlob/deleteRecord
     members.steps.ts           # member.*, role.set, audit.query, membership.list
+    admin.steps.ts             # admin.setOwner via HTTP Basic auth
 ```
+
+**Admin endpoints (`admin-set-owner.feature`).** The `app.certified.group.admin.*`
+namespace is operator-gated, not member-gated: it authenticates with HTTP Basic
+auth against the service admin password, not a service-auth JWT. So its steps use
+a dedicated `callXrpcWithBasicAuth` wrapper rather than `mintServiceAuth` /
+`callXrpc`, and the feature is gated by a new `@needs-cgs-admin` tag that runs
+only when `CGS_ADMIN_PASSWORD` is configured (alongside `@needs-rbac-accounts`,
+since it needs the owner/admin accounts to swap between).
+
+> **Env-var name collision.** The e2e config already has an `ADMIN_PASSWORD` — but
+> that is the admin *role account's* PDS password (used to mint that account's
+> JWTs). The CGS *service* admin password is a different secret, so it is read
+> from **`CGS_ADMIN_PASSWORD`** to avoid the clash. On the CGS deployment itself
+> the variable is still named `ADMIN_PASSWORD`; only the e2e config renames it.
+
+The happy-path scenario reassigns ownership to the admin account and then reverts
+it, leaving the group as it started (the same non-destructive pattern the RBAC
+feature uses for seeding/cleanup).
 
 The import (clean-slate) and destroy (teardown) are also **`BeforeAll`/`AfterAll`
 fixtures** so the group exists for `records`/`membership`/`reporting` without

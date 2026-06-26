@@ -392,6 +392,14 @@ jobs:
           MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
           OUTSIDER_IDENTIFIER: ${{ vars.OUTSIDER_IDENTIFIER }}
           OUTSIDER_PASSWORD: ${{ secrets.OUTSIDER_PASSWORD }}
+          # CGS_ADMIN_PASSWORD (the @needs-cgs-admin admin-set-owner feature) is
+          # intentionally NOT set here: the e2e job runs against the deployed
+          # preview, and Railway gates the deploy on CI passing. A PR that adds
+          # or changes the admin endpoint would run its new e2e against the OLD
+          # preview (no endpoint yet) and deadlock its own deploy. Leaving this
+          # unset auto-excludes the feature; enable it in a follow-up once the
+          # endpoint is already live (and set CGS_ADMIN_PASSWORD on the deployed
+          # CGS env as ADMIN_PASSWORD).
         run: pnpm test:e2e
 
       - name: Publish e2e test report

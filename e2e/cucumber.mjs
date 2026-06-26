@@ -29,10 +29,15 @@ const rbacAccountsConfigured = Boolean(
   process.env.OUTSIDER_PASSWORD,
 )
 
+// The CGS *service* admin password (CGS_ADMIN_PASSWORD) gates the @needs-cgs-admin
+// admin-endpoint feature. Distinct from ADMIN_PASSWORD (an account password above).
+const cgsAdminConfigured = Boolean(process.env.CGS_ADMIN_PASSWORD)
+
 const tagExclusions = [
   'not @manual',
   'not @pending',
   ...(rbacAccountsConfigured ? [] : ['not @needs-rbac-accounts']),
+  ...(cgsAdminConfigured ? [] : ['not @needs-cgs-admin']),
 ]
 
 const shared = {

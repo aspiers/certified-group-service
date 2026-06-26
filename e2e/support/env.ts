@@ -71,6 +71,13 @@ export const testEnv = {
 
   // Label for the app password the helper mints on the importer account.
   appPasswordName: process.env.IMPORTER_APP_PASSWORD_NAME ?? 'cgs-e2e-smoke',
+
+  // The CGS *service* admin password — the HTTP Basic credential for the
+  // operator-only app.certified.group.admin.* endpoints (set as ADMIN_PASSWORD
+  // on the CGS deployment itself). NOTE: distinct from ADMIN_PASSWORD above,
+  // which is the admin *role account's* PDS password used to mint that account's
+  // JWTs. Named CGS_ADMIN_PASSWORD here to avoid that collision.
+  cgsAdminPassword: process.env.CGS_ADMIN_PASSWORD ?? '',
 }
 
 /** True when the full RBAC account set is configured (all six vars). */
@@ -82,3 +89,6 @@ export const rbacAccountsConfigured = Boolean(
   testEnv.outsiderIdentifier &&
   testEnv.outsiderPassword,
 )
+
+/** True when the CGS service admin password is configured (admin endpoints enabled). */
+export const cgsAdminConfigured = Boolean(testEnv.cgsAdminPassword)

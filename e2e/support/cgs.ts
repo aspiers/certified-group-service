@@ -129,6 +129,43 @@ export async function callXrpcWithApiKey(
 }
 
 /**
+ * Call an admin XRPC method with HTTP Basic auth (username `admin`, password the
+ * service's CGS_ADMIN_PASSWORD) instead of a service-auth JWT. The admin
+ * namespace (`app.certified.group.admin.*`) is operator-gated, not member-gated;
+ * see src/auth/verifier.ts#verifyAdmin. Pass an empty/wrong password to exercise
+ * the rejection paths.
+ */
+export async function callXrpcWithBasicAuth(
+  sink: HttpSink,
+  opts: {
+    cgsUrl: string
+    nsid: string
+    password: string
+    body?: unknown
+    /** Username; defaults to `admin`. Override to test a wrong username. */
+    username?: string
+    /** Omit the Authorization header entirely (no-credentials case). */
+    noAuth?: boolean
+    method?: 'GET' | 'POST'
+  },
+): Promise<void> {
+  const headers: Record<string, string> = {}
+  if (!opts.noAuth) {
+    const creds = Buffer.from(`${opts.username ?? 'admin'}:${opts.password}`).toString('base64')
+    headers.Authorization = `Basic ${creds}`
+  }
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+
+  const res = await fetch(xrpcUrl(opts.cgsUrl, opts.nsid), {
+    method: opts.method ?? 'POST',
+    headers,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  })
+
+  await recordResponse(sink, res)
+}
+
+/**
  * Raw-stream upload for app.certified.group.repo.uploadBlob — the handler reads
  * the raw request body (not JSON), so the bytes go straight in the body with the
  * blob's own Content-Type.
