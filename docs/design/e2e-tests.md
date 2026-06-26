@@ -136,8 +136,8 @@ only when `CGS_ADMIN_PASSWORD` is configured (alongside `@needs-rbac-accounts`,
 since it needs the owner/admin accounts to swap between).
 
 > **Env-var name collision.** The e2e config already has an `ADMIN_PASSWORD` — but
-> that is the admin *role account's* PDS password (used to mint that account's
-> JWTs). The CGS *service* admin password is a different secret, so it is read
+> that is the admin _role account's_ PDS password (used to mint that account's
+> JWTs). The CGS _service_ admin password is a different secret, so it is read
 > from **`CGS_ADMIN_PASSWORD`** to avoid the clash. On the CGS deployment itself
 > the variable is still named `ADMIN_PASSWORD`; only the e2e config renames it.
 
