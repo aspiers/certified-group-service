@@ -15,8 +15,10 @@
 #   --dry-run   print what would be set, without calling gh
 #
 # Notes:
-#   - E2E_CGS_URL is intentionally NOT pushed: the workflow derives the service
-#     URL from the Railway deployment, so an E2E_CGS_URL value would be ignored.
+#   - E2E_CGS_URL and E2E_CGS_SERVICE_DID are intentionally NOT pushed: the
+#     workflow tests the PR's Railway preview and derives both from it per run.
+#     A fixed value (e.g. copied from a staging-pointed e2e/.env) would mismatch
+#     the preview's host and fail with BadJwtAudience.
 #   - Blank vars and comment lines are skipped (e.g. unset RBAC accounts).
 #   - Values are read literally; surrounding single/double quotes are stripped.
 #
@@ -52,9 +54,9 @@ E2E_GROUP_MEMBER_PASSWORD
 E2E_GROUP_OUTSIDER_PASSWORD
 "
 
-# VARIABLES — public, non-sensitive values.
+# VARIABLES — public, non-sensitive values. (E2E_CGS_SERVICE_DID is NOT here:
+# the workflow derives it per preview deployment; see the skip below.)
 VARIABLES="
-E2E_CGS_SERVICE_DID
 E2E_GROUP_IMPORTER_IDENTIFIER
 E2E_GROUP_OWNER_IDENTIFIER
 E2E_GROUP_ADMIN_IDENTIFIER
@@ -104,8 +106,14 @@ while IFS= read -r line || [ -n "$line" ]; do
     \'*\') value="${value#\'}"; value="${value%\'}" ;;
   esac
 
-  if [ "$key" = "E2E_CGS_URL" ]; then
-    echo "skip      $key (derived from the Railway deployment)"
+  # Both of these are derived per-deployment by the workflow, NOT pushed: the
+  # `run` job tests the PR's Railway PREVIEW, whose host (and thus did:web)
+  # differs per PR. A fixed value copied from a staging-pointed e2e/.env would
+  # mismatch the preview and fail every run with `BadJwtAudience`. The workflow
+  # sets E2E_CGS_URL from the resolved preview URL and leaves E2E_CGS_SERVICE_DID
+  # unset so env.ts derives `did:web:<preview host>`.
+  if [ "$key" = "E2E_CGS_URL" ] || [ "$key" = "E2E_CGS_SERVICE_DID" ]; then
+    echo "skip      $key (derived per-deployment by the workflow)"
     skip_count=$((skip_count + 1))
     continue
   fi
