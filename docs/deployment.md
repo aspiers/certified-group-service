@@ -52,6 +52,14 @@ the admin endpoints, store it in your platform's secret store (not in the
 repo), and rotate it if exposed. See the [Admin operations](api-reference.md#admin-operations)
 section of the API reference for the endpoint contracts.
 
+Helper scripts:
+
+- `scripts/set-cgs-admin-password.sh` — generate a strong `CGS_ADMIN_PASSWORD`
+  with `openssl` and set it on a Railway environment.
+- `scripts/set-owner.sh` — reassign a group's owner by calling
+  `app.certified.group.admin.setOwner` (HTTP Basic auth, reads
+  `CGS_ADMIN_PASSWORD` from the environment). Run with `--dry-run` first.
+
 ## Deploying to Railway
 
 CGS is pre-configured for [Railway](https://railway.app/) via `railway.toml`.
