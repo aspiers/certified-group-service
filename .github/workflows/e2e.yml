@@ -395,15 +395,12 @@ jobs:
           E2E_GROUP_MEMBER_PASSWORD: ${{ secrets.E2E_GROUP_MEMBER_PASSWORD }}
           E2E_GROUP_OUTSIDER_IDENTIFIER: ${{ vars.E2E_GROUP_OUTSIDER_IDENTIFIER }}
           E2E_GROUP_OUTSIDER_PASSWORD: ${{ secrets.E2E_GROUP_OUTSIDER_PASSWORD }}
-          # CGS_ADMIN_PASSWORD gates the @needs-cgs-admin admin-set-owner feature.
-          # It is not set here yet, so that feature is excluded (cucumber.mjs
-          # announces the exclusion at startup). To run it in CI: set this as a
-          # repo secret AND set CGS_ADMIN_PASSWORD on the preview deployment to
-          # the same value (the suite authenticates against the live preview, so
-          # the two must match). The per-SHA preview already contains the
-          # endpoint, so there is no chicken-and-egg problem — the feature just
-          # needs a credential to run with.
-          # CGS_ADMIN_PASSWORD: ${{ secrets.CGS_ADMIN_PASSWORD }}
+          # CGS_ADMIN_PASSWORD enables the @needs-cgs-admin admin-set-owner
+          # feature. The suite authenticates against the live preview, so this
+          # secret's value MUST match the CGS_ADMIN_PASSWORD set on the preview
+          # deployment, or the admin scenarios get 401. When this is unset
+          # cucumber.mjs excludes the feature and announces it at startup.
+          CGS_ADMIN_PASSWORD: ${{ secrets.CGS_ADMIN_PASSWORD }}
         run: |
           # The importer/owner accounts are required for the authenticated suite,
           # but unlike the RBAC accounts they are not tag-gated — without them

@@ -86,6 +86,7 @@ function xrpcUrl(cgsUrl: string, nsid: string, repo?: string): string {
  * the sink. JSON Content-Type is set only when a JSON body is present.
  */
 export async function callXrpc(sink: HttpSink, opts: CallOpts): Promise<void> {
+  resetSink(sink)
   const headers: Record<string, string> = { Authorization: `Bearer ${opts.token}` }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
 
@@ -116,6 +117,7 @@ export async function callXrpcWithApiKey(
     repo?: string
   },
 ): Promise<void> {
+  resetSink(sink)
   const headers: Record<string, string> = { 'X-API-Key': opts.apiKey }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
 
@@ -149,6 +151,7 @@ export async function callXrpcWithBasicAuth(
     method?: 'GET' | 'POST'
   },
 ): Promise<void> {
+  resetSink(sink)
   const headers: Record<string, string> = {}
   if (!opts.noAuth) {
     const creds = Buffer.from(`${opts.username ?? 'admin'}:${opts.password}`).toString('base64')
@@ -181,6 +184,7 @@ export async function uploadBlobXrpc(
     repo?: string
   },
 ): Promise<void> {
+  resetSink(sink)
   // Wrap the raw bytes in a Blob so the body is a BodyInit the fetch typings
   // accept across lib configs (a bare Uint8Array is rejected by some). An
   // ArrayBuffer is an unambiguous BlobPart in every lib config.
@@ -194,6 +198,19 @@ export async function uploadBlobXrpc(
   })
 
   await recordResponse(sink, res)
+}
+
+/**
+ * Clear any previously-recorded response. Call this before each fetch() so that
+ * if the request itself rejects (network error) — and recordResponse never runs
+ * — the failure hook reports an empty state for this step rather than stale
+ * details left over from the previous request.
+ */
+function resetSink(sink: HttpSink): void {
+  sink.lastHttpStatus = undefined
+  sink.lastHttpJson = undefined
+  sink.lastHttpBody = undefined
+  sink.lastHttpHeaders = undefined
 }
 
 async function recordResponse(sink: HttpSink, res: Response): Promise<void> {

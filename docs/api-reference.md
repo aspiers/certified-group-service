@@ -988,6 +988,7 @@ the only way to change it.
 
 | Code | Name                   | Description                                                                              |
 | ---- | ---------------------- | ---------------------------------------------------------------------------------------- |
+| 400  | InvalidRequest         | `newOwner` is malformed or cannot be resolved to a DID                                   |
 | 401  | AuthenticationRequired | Missing/invalid Basic credentials, or admin endpoints disabled (no `CGS_ADMIN_PASSWORD`) |
 | 404  | UnknownGroup           | `repo` does not resolve to a managed group                                               |
 
