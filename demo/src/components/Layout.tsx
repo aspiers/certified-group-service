@@ -3,7 +3,6 @@ import { Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuth, useGroup } from '../App'
 import { logout, listMyGroups, type MyGroup } from '../api'
 import { CopyDid } from './CopyDid'
-import { HandleId } from './HandleId'
 import { useHandles } from '../useHandles'
 
 const styles = {
@@ -79,6 +78,20 @@ export function Layout() {
     // freshly-registered group should appear in the list without a reload).
   }, [user, group?.did])
 
+  // Auto-select so the user is never staring at an empty picker when they do
+  // have groups: pick the first when nothing is active, or when the restored
+  // group is one they're no longer a member of. Keying on the membership set
+  // (not array identity) keeps this idempotent across re-renders.
+  const groupKey = myGroups.map((g) => g.groupDid).join(',')
+  useEffect(() => {
+    if (myGroups.length === 0) return
+    const stillMember = group && myGroups.some((g) => g.groupDid === group.did)
+    if (stillMember) return
+    const first = myGroups[0]
+    setGroup({ did: first.groupDid, handle: handles[first.groupDid] ?? '' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupKey])
+
   const handleLogout = async () => {
     await logout()
     setUser(null)
@@ -134,7 +147,7 @@ export function Layout() {
             value={group?.did ?? ''}
             onChange={(e) => selectGroup(e.target.value)}
           >
-            <option value="">— none —</option>
+            <option value="">— Select a group —</option>
             {myGroups.map((g) => {
               const handle = handles[g.groupDid]
               const label = handle ? `${handle} (${g.role})` : `${g.groupDid} (${g.role})`
@@ -145,15 +158,6 @@ export function Layout() {
               )
             })}
           </select>
-
-          {group && (
-            <HandleId
-              did={group.did}
-              handle={group.handle}
-              layout="inline"
-              style={{ fontSize: 12, background: '#fff', padding: '2px 8px', borderRadius: 4 }}
-            />
-          )}
 
           {myGroups.length === 0 && !groupsError && (
             <>
