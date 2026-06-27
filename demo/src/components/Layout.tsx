@@ -78,17 +78,17 @@ export function Layout() {
     // freshly-registered group should appear in the list without a reload).
   }, [user, group?.did])
 
-  // Auto-select so the user is never staring at an empty picker when they do
-  // have groups: pick the first when nothing is active, or when the restored
-  // group is one they're no longer a member of. Keying on the membership set
-  // (not array identity) keeps this idempotent across re-renders.
+  // Auto-select ONLY when the user has exactly one group — there is no choice
+  // to make, so picking it for them saves a click. With more than one group we
+  // leave the picker on its placeholder so the user consciously chooses (and
+  // doesn't silently land on whichever happens to be first). Keying on the
+  // membership set keeps this idempotent across re-renders.
   const groupKey = myGroups.map((g) => g.groupDid).join(',')
   useEffect(() => {
-    if (myGroups.length === 0) return
-    const stillMember = group && myGroups.some((g) => g.groupDid === group.did)
-    if (stillMember) return
-    const first = myGroups[0]
-    setGroup({ did: first.groupDid, handle: handles[first.groupDid] ?? '' })
+    if (myGroups.length !== 1) return
+    const only = myGroups[0]
+    if (group?.did === only.groupDid) return
+    setGroup({ did: only.groupDid, handle: handles[only.groupDid] ?? '' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupKey])
 
