@@ -39,14 +39,18 @@ SHOW=false
 DRY_RUN=false
 ASSUME_YES=false
 
-usage() { sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,/^set -euo pipefail$/p' "$0" | sed '$d; s/^# \{0,1\}//'; }
+err() { echo "Error: $*" >&2; exit 2; }
+# Ensure a value-taking flag actually has a value (so `--environment` as the
+# last token fails clearly instead of an `unbound variable` crash under set -u).
+need() { [ "$2" -gt 1 ] || err "$1 requires a value."; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    -e | --environment) ENVIRONMENT="$2"; shift 2 ;;
-    -s | --service) SERVICE="$2"; shift 2 ;;
-    -p | --project) PROJECT="$2"; shift 2 ;;
-    --length) LENGTH="$2"; shift 2 ;;
+    -e | --environment) need "$1" "$#"; ENVIRONMENT="$2"; shift 2 ;;
+    -s | --service) need "$1" "$#"; SERVICE="$2"; shift 2 ;;
+    -p | --project) need "$1" "$#"; PROJECT="$2"; shift 2 ;;
+    --length) need "$1" "$#"; LENGTH="$2"; shift 2 ;;
     --skip-deploys) SKIP_DEPLOYS=true; shift ;;
     --show) SHOW=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
@@ -55,8 +59,6 @@ while [ $# -gt 0 ]; do
     *) echo "Unknown argument: $1" >&2; usage; exit 2 ;;
   esac
 done
-
-err() { echo "Error: $*" >&2; exit 2; }
 
 command -v openssl >/dev/null 2>&1 || err "openssl not found on PATH."
 command -v railway >/dev/null 2>&1 || err "railway CLI not found on PATH."
@@ -114,4 +116,8 @@ printf '%s' "$PASSWORD" | railway variable set CGS_ADMIN_PASSWORD --stdin \
 
 echo
 echo "Done. CGS_ADMIN_PASSWORD is set on $ENVIRONMENT/$SERVICE."
-$SHOW || echo "(Password not shown. Re-run with --show next time, or read it back with: railway variable list -k -e $ENVIRONMENT -s $SERVICE)"
+# Mirror --project in the read-back hint so it reads the same project that was
+# just written, not the (possibly different) linked default.
+readback="railway variable list -k -e $ENVIRONMENT -s $SERVICE"
+[ -n "$PROJECT" ] && readback="$readback -p $PROJECT"
+$SHOW || echo "(Password not shown. Re-run with --show next time, or read it back with: $readback)"

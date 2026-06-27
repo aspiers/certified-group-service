@@ -37,22 +37,24 @@ PASSWORD="${CGS_ADMIN_PASSWORD:-}"
 DRY_RUN=false
 ASSUME_YES=false
 
-usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,/^set -euo pipefail$/p' "$0" | sed '$d; s/^# \{0,1\}//'; }
+err() { echo "Error: $*" >&2; exit 2; }
+# Ensure a value-taking flag actually has a value (so `--url` as the last token
+# fails with a clear message instead of an `unbound variable` crash under set -u).
+need() { [ "$2" -gt 1 ] || err "$1 requires a value."; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    -u | --url) URL="$2"; shift 2 ;;
-    -r | --repo) REPO="$2"; shift 2 ;;
-    -n | --new-owner) NEW_OWNER="$2"; shift 2 ;;
-    --password) PASSWORD="$2"; shift 2 ;;
+    -u | --url) need "$1" "$#"; URL="$2"; shift 2 ;;
+    -r | --repo) need "$1" "$#"; REPO="$2"; shift 2 ;;
+    -n | --new-owner) need "$1" "$#"; NEW_OWNER="$2"; shift 2 ;;
+    --password) need "$1" "$#"; PASSWORD="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     -y | --yes) ASSUME_YES=true; shift ;;
     -h | --help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 2 ;;
   esac
 done
-
-err() { echo "Error: $*" >&2; exit 2; }
 
 command -v curl >/dev/null 2>&1 || err "curl not found on PATH."
 [ -n "$URL" ] || err "--url is required."
@@ -94,10 +96,17 @@ if ! $ASSUME_YES; then
 fi
 
 # Capture the body and the HTTP status. The status is appended after a newline
-# sentinel so we can split them without a temp file. --user sends HTTP Basic.
+# sentinel so we can split them without a temp file.
+#
+# The credential is fed to curl via `--config -` (stdin) rather than `--user` on
+# the command line, so the password never appears in the process arguments
+# (readable via `ps` / /proc/<pid>/cmdline while the request runs). curl's
+# config format takes `user = "<value>"`; a literal `"` or `\` in the password
+# would need escaping, but generated CGS_ADMIN_PASSWORDs are base64url (no such
+# characters).
 response="$(
-  curl -sS -X POST "$ENDPOINT" \
-    --user "admin:$PASSWORD" \
+  printf 'user = "admin:%s"\n' "$PASSWORD" | curl -sS -X POST "$ENDPOINT" \
+    --config - \
     -H 'Content-Type: application/json' \
     -d "$BODY" \
     -w $'\n%{http_code}'
