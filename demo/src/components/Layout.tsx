@@ -66,10 +66,19 @@ export function Layout() {
     setGroupsError('')
     listMyGroups()
       .then((groups) => {
-        if (!cancelled) setMyGroups(groups)
+        if (cancelled) return
+        setMyGroups(groups)
+        // Drop an active group that isn't in the caller's memberships — e.g. a
+        // different user logged in on this session, or the group is gone. Stops
+        // later requests targeting a group the caller can't act on.
+        if (group && !groups.some((g) => g.groupDid === group.did)) setGroup(null)
       })
       .catch((err: any) => {
-        if (!cancelled) setGroupsError(err.message)
+        if (cancelled) return
+        setGroupsError(err.message)
+        // Membership unknown — don't keep targeting a possibly-stale group.
+        setMyGroups([])
+        setGroup(null)
       })
     return () => {
       cancelled = true
@@ -95,6 +104,7 @@ export function Layout() {
   const handleLogout = async () => {
     await logout()
     setUser(null)
+    setGroup(null) // don't carry the active group into the next user's session
     navigate('/login')
   }
 
