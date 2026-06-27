@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuth, useGroup } from '../App'
-import { logout, resolveIdentifier } from '../api'
+import { logout, listMyGroups, type MyGroup } from '../api'
 import { CopyDid } from './CopyDid'
 import { HandleId } from './HandleId'
+import { useHandles } from '../useHandles'
 
 const styles = {
   nav: {
@@ -33,15 +34,50 @@ const styles = {
     borderRadius: 4,
     fontSize: 13,
   } as React.CSSProperties,
+  select: {
+    padding: '3px 8px',
+    border: '1px solid #90a4ae',
+    borderRadius: 4,
+    fontSize: 12,
+    maxWidth: 360,
+  } as React.CSSProperties,
 }
 
 export function Layout() {
   const { user, setUser } = useAuth()
   const { group, setGroup } = useGroup()
   const navigate = useNavigate()
-  const [showGroupInput, setShowGroupInput] = useState(false)
-  const [didInput, setDidInput] = useState('')
-  const [didInputError, setDidInputError] = useState('')
+
+  // The groups the logged-in user belongs to, for the active-group picker. The
+  // demo can only operate on groups the caller is a member of (member.list and
+  // friends are member-gated), so this list IS the full set of usable groups —
+  // there is no value in a free-form "any DID" entry.
+  const [myGroups, setMyGroups] = useState<MyGroup[]>([])
+  const [groupsError, setGroupsError] = useState('')
+
+  // Reverse-resolve group DIDs so the picker can lead with handles.
+  const handles = useHandles(myGroups.map((g) => g.groupDid))
+
+  useEffect(() => {
+    if (!user) {
+      setMyGroups([])
+      return
+    }
+    let cancelled = false
+    setGroupsError('')
+    listMyGroups()
+      .then((groups) => {
+        if (!cancelled) setMyGroups(groups)
+      })
+      .catch((err: any) => {
+        if (!cancelled) setGroupsError(err.message)
+      })
+    return () => {
+      cancelled = true
+    }
+    // Re-fetch when the user changes, or after the active group changes (a
+    // freshly-registered group should appear in the list without a reload).
+  }, [user, group?.did])
 
   const handleLogout = async () => {
     await logout()
@@ -49,19 +85,15 @@ export function Layout() {
     navigate('/login')
   }
 
-  const handleSetGroupDid = async () => {
-    const value = didInput.trim()
-    if (!value) return
-    setDidInputError('')
-    try {
-      // Accept a DID or a handle.
-      const { did, handle } = await resolveIdentifier(value)
-      setGroup({ did, handle: handle ?? '' })
-      setDidInput('')
-      setShowGroupInput(false)
-    } catch (err: any) {
-      setDidInputError(err.message)
+  const selectGroup = (did: string) => {
+    if (!did) {
+      setGroup(null)
+      return
     }
+    const handle = handles[did]
+    // Empty handle is fine — HandleId falls back to the DID and the Dashboard
+    // re-resolves the handle on load.
+    setGroup({ did, handle: handle ?? '' })
   }
 
   return (
@@ -94,69 +126,46 @@ export function Layout() {
           borderBottom: '1px solid #ddd',
           fontSize: 13,
         }}>
-          {group ? (
+          <span style={{ fontWeight: 600 }}>Active group:</span>
+
+          {/* Picker over the caller's own memberships. */}
+          <select
+            style={styles.select}
+            value={group?.did ?? ''}
+            onChange={(e) => selectGroup(e.target.value)}
+          >
+            <option value="">— none —</option>
+            {myGroups.map((g) => {
+              const handle = handles[g.groupDid]
+              const label = handle ? `${handle} (${g.role})` : `${g.groupDid} (${g.role})`
+              return (
+                <option key={g.groupDid} value={g.groupDid}>
+                  {label}
+                </option>
+              )
+            })}
+          </select>
+
+          {group && (
+            <HandleId
+              did={group.did}
+              handle={group.handle}
+              layout="inline"
+              style={{ fontSize: 12, background: '#fff', padding: '2px 8px', borderRadius: 4 }}
+            />
+          )}
+
+          {myGroups.length === 0 && !groupsError && (
             <>
-              <span style={{ fontWeight: 600 }}>Active group:</span>
-              <HandleId
-                did={group.did}
-                handle={group.handle}
-                layout="inline"
-                style={{ fontSize: 12, background: '#fff', padding: '2px 8px', borderRadius: 4 }}
-              />
-              <button
-                onClick={() => setShowGroupInput(!showGroupInput)}
-                style={{ ...styles.btn, color: '#1a1a2e', borderColor: '#90a4ae', fontSize: 12, padding: '2px 8px' }}
-              >
-                Switch
-              </button>
-              <button
-                onClick={() => setGroup(null)}
-                style={{ ...styles.btn, color: '#e74c3c', borderColor: '#e74c3c', fontSize: 12, padding: '2px 8px' }}
-              >
-                Clear
-              </button>
-            </>
-          ) : (
-            <>
-              <span style={{ color: '#e65100' }}>No group selected.</span>
+              <span style={{ color: '#e65100' }}>You are not in any groups yet.</span>
               <Link to="/register" style={{ color: '#1565c0', fontWeight: 600, textDecoration: 'none' }}>
                 Register a new group
               </Link>
-              <span style={{ color: '#999' }}>or</span>
-              <button
-                onClick={() => setShowGroupInput(!showGroupInput)}
-                style={{ ...styles.btn, color: '#1a1a2e', borderColor: '#90a4ae', fontSize: 12, padding: '2px 8px' }}
-              >
-                Enter Group DID
-              </button>
             </>
           )}
-          {showGroupInput && (
-            <div style={{ display: 'flex', gap: 4, marginLeft: 8, alignItems: 'center' }}>
-              <input
-                style={{
-                  padding: '3px 8px',
-                  border: '1px solid #ccc',
-                  borderRadius: 4,
-                  fontSize: 12,
-                  width: 280,
-                }}
-                value={didInput}
-                onChange={(e) => setDidInput(e.target.value)}
-                placeholder="Group DID or handle"
-                onKeyDown={(e) => e.key === 'Enter' && handleSetGroupDid()}
-                autoFocus
-              />
-              <button
-                onClick={handleSetGroupDid}
-                style={{ ...styles.btn, color: '#1a1a2e', borderColor: '#1a1a2e', fontSize: 12, padding: '2px 8px' }}
-              >
-                Set
-              </button>
-              {didInputError && (
-                <span style={{ color: '#c0392b', fontSize: 11 }}>{didInputError}</span>
-              )}
-            </div>
+
+          {groupsError && (
+            <span style={{ color: '#c0392b', fontSize: 11 }}>Couldn’t load your groups: {groupsError}</span>
           )}
         </div>
       )}
